@@ -280,7 +280,7 @@ function tabsBar(t){
 }
 function ringSVG(prog, onGlass){
   const r=24, c=2*Math.PI*r, off=c*(1-Math.max(.003,Math.min(1,prog)));
-  const bg=onGlass?"rgba(255,255,255,.25)":"var(--fill)", fg=onGlass?"#fff":"var(--air)";
+  const bg="var(--fill)", fg=onGlass?"var(--ok)":"var(--air)";
   return `<svg viewBox="0 0 56 56"><circle cx="28" cy="28" r="${r}" fill="none" stroke="${bg}" stroke-width="6"/><circle class="pg" cx="28" cy="28" r="${r}" fill="none" stroke="${fg}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>`;
 }
 let HERO_ENTER=false;
@@ -291,26 +291,42 @@ const set=(id,txt)=>{ const el=document.getElementById(id); if(el && el.textCont
 function mix(a,b,t){ return a.map((v,i)=>Math.round(v+(b[i]-v)*t)); }
 const rgb=a=>`rgb(${a.join(",")})`;
 function skyVars(c){
-  /* Les couleurs du logo : fumée gris ardoise -> ciel bleu, adoucies.
-     Le soir le bas du ciel se réchauffe, le matin il se dore : le ciel suit la journée. */
-  const L={top:[[100,108,114],[60,108,166]], mid:[[124,131,136],[106,150,196]], low:[[150,156,160],[182,204,222]]};
-  const D={top:[[22,26,30],[8,20,36]], mid:[[34,39,44],[16,40,66]], low:[[48,53,58],[34,62,94]]};
-  const P=DARK?D:L, e=Math.pow(c,.8);
-  let top=mix(P.top[0],P.top[1],e), mid=mix(P.mid[0],P.mid[1],e), low=mix(P.low[0],P.low[1],e);
+  /* Couleurs du logo de Souffle : fumée gris ardoise -> ciel bleu, adoucies.
+     Collines vert sauge qui reverdissent avec le ciel. Le soir le bas du ciel se réchauffe,
+     le matin il se dore : le ciel suit la journée. */
+  const L={top:[[112,120,126],[78,128,184]], mid:[[138,145,150],[132,172,212]], low:[[176,181,184],[214,230,240]],
+           h1:[[168,174,166],[178,204,170]], h2:[[140,148,140],[128,170,128]], leaf:[[120,130,120],[92,146,100]]};
+  const D={top:[[22,26,30],[8,20,36]], mid:[[34,39,44],[16,40,66]], low:[[48,53,58],[34,62,94]],
+           h1:[[40,46,44],[30,56,46]], h2:[[30,36,34],[22,44,36]], leaf:[[44,52,48],[52,96,70]]};
+  const P=DARK?D:L, e=Math.pow(c,.8), M=k=>mix(P[k][0],P[k][1],e);
+  let top=M("top"), mid=M("mid"), low=M("low");
   const h=new Date().getHours()+new Date().getMinutes()/60;
   const bell=(x,a,b)=>x<=a||x>=b?0:Math.sin(Math.PI*(x-a)/(b-a));
-  const eve=bell(h,16.5,22)*.55, morn=bell(h,5.5,10.5)*.4;
-  const warm=DARK?[78,60,72]:[228,194,172], gold=DARK?[60,58,50]:[234,214,178], dusk=DARK?[30,34,58]:[138,148,186];
-  low=mix(mix(low,warm,eve),gold,morn); mid=mix(mid,dusk,eve*.6);
-  return {top:rgb(top), mid:rgb(mid), low:rgb(low),
-          sun:Math.max(0,(c-.22)/.78)*(DARK?.3:.85), smoke:.85*Math.pow(1-c,1.3)};
+  const eve=bell(h,16.5,22)*.5, morn=bell(h,5.5,10.5)*.35;
+  const warm=DARK?[78,60,72]:[236,206,186], gold=DARK?[60,58,50]:[240,226,196], dusk=DARK?[30,34,58]:[150,160,198];
+  low=mix(mix(low,warm,eve),gold,morn); mid=mix(mid,dusk,eve*.5);
+  return {top:rgb(top), mid:rgb(mid), low:rgb(low), h1:rgb(M("h1")), h2:rgb(M("h2")), leaf:rgb(M("leaf")),
+          sun:Math.max(0,(c-.15)/.85)*(DARK?.25:.9), smoke:.85*Math.pow(1-c,1.3), cloud:Math.min(1,.25+c*1.2)};
 }
 function paintSky(el, c){
   if(!el) return; const v=skyVars(c);
   el.style.setProperty("--sky-top",v.top); el.style.setProperty("--sky-mid",v.mid); el.style.setProperty("--sky-low",v.low);
   el.style.setProperty("--sun-o",v.sun.toFixed(3)); el.style.setProperty("--smoke-o",v.smoke.toFixed(3));
+  if(v.h1){ el.style.setProperty("--hill1",v.h1); el.style.setProperty("--hill2",v.h2); el.style.setProperty("--leaf",v.leaf); el.style.setProperty("--cloud-o",v.cloud.toFixed(3)); }
 }
 const SMOKE='<div class="sun"></div><div class="smoke s1"></div><div class="smoke s2"></div><div class="smoke s3"></div><div class="smoke s4"></div>';
+const CLOUD='<svg viewBox="0 0 120 50" aria-hidden="true"><path d="M18 46h86a14 14 0 0 0 0-28 22 22 0 0 0-41-8 16 16 0 0 0-27 9A14 14 0 0 0 18 46z" fill="var(--cloud)"/></svg>';
+const CLOUDS=`<div class="cloud c1">${CLOUD}</div><div class="cloud c2">${CLOUD}</div><div class="cloud c3">${CLOUD}</div>`;
+/* Un arbre pousse sur les collines à chaque étape du corps franchie. */
+const TREE_X=[46,330,92,268,150,372,20,214,120,300,180,250];
+function treesSVG(n){
+  return TREE_X.slice(0,n).map((x,k)=>{ const big=k%3!==1, y=big?66:72, r=big?11:8;
+    return `<g transform="translate(${x} ${y})"><g class="tree" style="--k:${k}"><rect x="-1.6" y="0" width="3.2" height="${big?14:11}" rx="1.6" fill="var(--trunk)"/><circle cx="0" cy="-2" r="${r}" fill="var(--leaf)"/><circle cx="${(-r*.35).toFixed(1)}" cy="${(-2-r*.35).toFixed(1)}" r="${(r*.45).toFixed(1)}" fill="var(--leaf-hi)"/></g></g>`; }).join("");
+}
+const HILLS=`<svg class="hills" viewBox="0 0 400 110" preserveAspectRatio="none" aria-hidden="true">
+  <path d="M0 64 C60 40 120 44 190 58 S320 38 400 50 V110 H0Z" fill="var(--hill1)"/>
+  <g id="trees"></g>
+  <path d="M0 86 C80 70 150 74 230 84 S340 72 400 78 V110 H0Z" fill="var(--hill2)"/></svg>`;
 
 /* ---------- Aujourd'hui (esprit Météo) ---------- */
 function viewToday(){
@@ -324,34 +340,34 @@ function viewToday(){
   let i=0; const I=()=>`style="--i:${i++}"`;
   const go=(label)=>`<span class="go">${label}${icon("chevron",13)}</span>`;
   return `
-  <div class="skybg" id="sky">${SMOKE}</div>
   <main class="today">
-    <header class="hero ${HERO_ENTER?"enter":""}" id="hero"></header>
+    <section class="scene" id="sky">${SMOKE}${CLOUDS}
+      <header class="hero ${HERO_ENTER?"enter":""}" id="hero"></header>${HILLS}</section>
     <div class="stagger">
-      <section class="glass" ${I()} aria-label="Argent économisé">
+      <section class="glass tone-sun" ${I()} aria-label="Argent économisé">
         <div class="gh">${icon("coin")} Économisé</div>
         <div class="gbig tnum" id="t-money"></div>
         <div class="gsub" style="padding-top:4px">${eur(s.perDayMoney)} de plus chaque jour, ${eur(s.yearly,true)} par an</div>
       </section>
       <div class="tiles" ${I()}>
-        <section class="glass"><div class="gh">${icon("nocig")} ${w.Many} évitées</div><div class="gmid tnum" id="t-cigs"></div><div class="gsub" id="t-packs"></div></section>
-        <section class="glass"><div class="gh">${icon("heart")} Vie regagnée</div><div class="gmid" id="t-life"></div><div class="gsub">estimation, ~${MIN_PER_CIG_LIFE} min par ${w.one}</div></section>
+        <section class="glass tone-leaf"><div class="gh">${icon("nocig")} ${w.Many} évitées</div><div class="gmid tnum" id="t-cigs"></div><div class="gsub" id="t-packs"></div></section>
+        <section class="glass tone-coral"><div class="gh">${icon("heart")} Vie regagnée</div><div class="gmid" id="t-life"></div><div class="gsub">estimation, ~${MIN_PER_CIG_LIFE} min par ${w.one}</div></section>
       </div>
-      ${S.health.baseline && new Date().getHours()>=18 && !S.health.entries[dayKey()]?`<section class="glass" ${I()} aria-label="Mesures du soir"><div class="gh">${icon("heart")} Tes mesures du soir</div>
+      ${S.health.baseline && new Date().getHours()>=18 && !S.health.entries[dayKey()]?`<section class="glass tone-leaf" ${I()} aria-label="Mesures du soir"><div class="gh">${icon("heart")} Tes mesures du soir</div>
         <div class="gsub" style="margin:4px 0 12px">Ta montre les a copiées à 18 h. Un toucher pour les ajouter.</div>
         <button class="btn air" data-act="hpaste">${icon("download",20)} Coller les mesures</button>
         <a class="btn soft" style="margin-top:8px" href="${SYNC_URL}">${icon("heart",20)} Relire ma montre</a></section>`:""}
-      <button class="glass" ${I()} data-goto="prog" data-prog="body"><div class="gh">${icon("lungs")} Ton corps ${go("Tout voir")}</div><div id="t-next"></div></button>
+      <button class="glass tone-leaf" ${I()} data-goto="prog" data-prog="body"><div class="gh">${icon("lungs")} Ton corps ${go("Tout voir")}</div><div id="t-next"></div></button>
       ${mission?`<section class="glass" ${I()}><div class="gh">${icon("check")} Mission du jour ${day} <button class="go" data-goto="prog" data-prog="plan">Programme${icon("chevron",13)}</button></div>
         <div class="row" style="align-items:flex-start"><div class="grow"><div class="h3">${esc(mission.title)}</div><div class="gtext" style="margin-top:4px">${esc(mission.text)}</div></div>
         <button class="gcheck ${S.missions[day]?"on":""}" data-act="mission" data-day="${day}" aria-label="${S.missions[day]?"Mission faite":"Marquer comme faite"}">${S.missions[day]?icon("check",18):""}</button></div></section>`:""}
       <div class="tiles" ${I()}>
-        <button class="glass" data-goto="stats"><div class="gh">${icon("flame")} Envies</div><div class="gmid tnum">${res}</div><div class="gsub">${env?`vaincues sur ${env}, soit ${Math.round(res/env*100)} %`:"vaincues. Le SOS est là quand il faut."}</div></button>
-        <button class="glass" data-goto="prog" data-prog="badges"><div class="gh">${icon("trophy")} Trophées</div><div class="gmid tnum">${got.length}<span style="font-size:18px;opacity:.7"> / ${bs.length}</span></div>
+        <button class="glass tone-coral" data-goto="stats"><div class="gh">${icon("flame")} Envies</div><div class="gmid tnum">${res}</div><div class="gsub">${env?`vaincues sur ${env}, soit ${Math.round(res/env*100)} %`:"vaincues. Le SOS est là quand il faut."}</div></button>
+        <button class="glass tone-sun" data-goto="prog" data-prog="badges"><div class="gh">${icon("trophy")} Trophées</div><div class="gmid tnum">${got.length}<span style="font-size:18px;opacity:.7"> / ${bs.length}</span></div>
           <div class="medals" style="margin-top:auto;padding-top:8px">${got.slice(0,4).map(b=>`<i>${icon(b.icon,16)}</i>`).join("")}</div></button>
       </div>
       ${rs.length?`<section class="glass" ${I()}><div class="gh">${icon("sparkle")} Pourquoi tu fais ça</div><p class="gquote" style="margin:0" id="t-reason"></p></section>`:""}
-      ${rw.length?`<section class="glass" ${I()}><div class="gh">${icon("gift")} Tes objectifs <button class="go" data-goto="me">Modifier${icon("chevron",13)}</button></div>
+      ${rw.length?`<section class="glass tone-sun" ${I()}><div class="gh">${icon("gift")} Tes objectifs <button class="go" data-goto="me">Modifier${icon("chevron",13)}</button></div>
         ${rw.map((r,k)=>`<div style="${k?"margin-top:14px":""}"><div class="row" style="margin-bottom:8px"><div class="grow"><div class="h3">${esc(r.name)}</div>
           <div class="gtext" style="font-size:14px" id="t-rw-${k}">${rwLine(r,s)}</div></div><div class="tnum" style="font-weight:600" id="t-rwp-${k}">${Math.floor(r.prog*100)} %</div></div>
           <div class="bar"><i id="t-rwb-${k}" style="width:${r.prog*100}%"></i></div></div>`).join("")}</section>`:""}
@@ -403,6 +419,7 @@ function tick(){
     set("t-du",`${plural(d,"jour","jours")} sans fumer`);
     set("t-clock",clock(s.el));
     set("t-steps",`${n} ${plural(n,"étape","étapes")} du corps sur ${MILESTONES.length}`);
+    const tg=document.getElementById("trees"); if(tg && tg.dataset.n!==String(n)){ tg.dataset.n=String(n); tg.innerHTML=treesSVG(n); }
   }
   set("t-money",eur(s.money)); set("t-cigs",int(s.avoided)); set("t-life",dur(s.life));
   set("t-packs",`${dec(s.packs,1)} ${W().packs}`);
@@ -430,7 +447,7 @@ function healthTeaser(attr=""){
   const l=S.health.entries[keys[keys.length-1]];
   if(b.rhr==null||l.rhr==null) return "";
   const d=l.rhr-b.rhr; if(d>-0.5) return "";
-  return `<button class="glass" ${attr} data-goto="health"><div class="gh">${icon("watch")} Apple Watch <span class="go">Santé${icon("chevron",13)}</span></div>
+  return `<button class="glass tone-leaf" ${attr} data-goto="health"><div class="gh">${icon("watch")} Apple Watch <span class="go">Santé${icon("chevron",13)}</span></div>
     <div class="row"><div class="gmid">−${dec(-d,0)}<span style="font-size:18px"> bpm</span></div><div class="gtext grow" style="font-size:15px">Ton pouls au repos a baissé depuis ta première mesure.</div></div></button>`;
 }
 
