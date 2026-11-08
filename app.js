@@ -196,6 +196,7 @@ const METRICS = [
 function importFromHash(){
   const h=location.hash.replace(/^#/,"");
   if(!h || !/(^|&)(rhr|hrv|o2|rr|pas7|pas)=/.test(h)) return false;
+  try{ localStorage.setItem("souffle.dernier-envoi", JSON.stringify({h:decodeURIComponent(h), at:new Date().toISOString()})); }catch(_){}
   const p=new URLSearchParams(h), e={};
   const rhr=parseNum(p.get("rhr")), hrv=parseNum(p.get("hrv")), rr=parseNum(p.get("rr"));
   let o2=parseNum(p.get("o2")); if(o2!=null && o2<=1.5) o2*=100;
