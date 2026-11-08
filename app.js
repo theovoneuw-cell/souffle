@@ -1344,3 +1344,8 @@ render();
   check();
   document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") check(); });
 })();
+
+/* Pas de zoom au pincement (le double appui est coupé par touch-action en CSS) : c'est une appli, pas une page. */
+(function(){
+  ["gesturestart","gesturechange"].forEach(t=>document.addEventListener(t,e=>e.preventDefault(),{passive:false}));
+})();

@@ -40,7 +40,8 @@
 ::selection{background:var(--air-soft);color:var(--ink)}
 input,textarea{caret-color:var(--air)}
 input,select,progress{accent-color:var(--air)}
-html,body{margin:0;background:var(--bg);color:var(--ink)}
+html,body{margin:0;background:var(--bg);color:var(--ink);touch-action:manipulation}
+a,button,input,label,select,textarea,[data-act],[data-tab],[data-goto]{touch-action:manipulation}
 body{font:16px/1.5 var(--text);letter-spacing:-.005em;-webkit-font-smoothing:antialiased;min-height:100dvh;overscroll-behavior-y:none;-webkit-text-size-adjust:100%}
 button,input,textarea,select{font:inherit;color:inherit;letter-spacing:inherit}
 button{cursor:pointer;border:0;background:none;padding:0}
