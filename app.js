@@ -58,7 +58,7 @@ function applyTheme(){
   if(t==="auto") document.documentElement.removeAttribute("data-theme");
   else document.documentElement.setAttribute("data-theme",t);
   const dark = t==="dark" || (t==="auto" && matchMedia("(prefers-color-scheme: dark)").matches);
-  document.querySelector('meta[name="theme-color"]').setAttribute("content", dark?"#0E1318":"#F1F3F2");
+  document.querySelector('meta[name="theme-color"]').setAttribute("content", dark?"#0E1318":"#F3F7FA");
   return dark;
 }
 let DARK = applyTheme();
@@ -291,42 +291,64 @@ const set=(id,txt)=>{ const el=document.getElementById(id); if(el && el.textCont
 function mix(a,b,t){ return a.map((v,i)=>Math.round(v+(b[i]-v)*t)); }
 const rgb=a=>`rgb(${a.join(",")})`;
 function skyVars(c){
-  /* Couleurs du logo de Souffle : fumée gris ardoise -> ciel bleu, adoucies.
-     Collines vert sauge qui reverdissent avec le ciel. Le soir le bas du ciel se réchauffe,
-     le matin il se dore : le ciel suit la journée. */
-  const L={top:[[112,120,126],[78,128,184]], mid:[[138,145,150],[132,172,212]], low:[[176,181,184],[214,230,240]],
-           h1:[[168,174,166],[178,204,170]], h2:[[140,148,140],[128,170,128]], leaf:[[120,130,120],[92,146,100]]};
-  const D={top:[[22,26,30],[8,20,36]], mid:[[34,39,44],[16,40,66]], low:[[48,53,58],[34,62,94]],
-           h1:[[40,46,44],[30,56,46]], h2:[[30,36,34],[22,44,36]], leaf:[[44,52,48],[52,96,70]]};
+  /* Fumée gris ardoise (le logo) qui laisse place à un ciel franc et des champs bien verts.
+     Le soir le bas du ciel se réchauffe, le matin il se dore : le ciel suit la journée. */
+  const L={top:[[118,128,136],[112,186,240]], mid:[[146,153,158],[170,216,247]], low:[[184,189,192],[230,244,253]],
+           h1:[[176,182,172],[176,224,156]], h2:[[150,158,148],[128,203,116]], h3:[[128,138,126],[92,180,94]], leaf:[[112,124,110],[64,156,74]]};
+  const D={top:[[22,26,30],[9,26,48]], mid:[[34,39,44],[16,44,76]], low:[[48,53,58],[30,64,100]],
+           h1:[[40,46,44],[30,66,46]], h2:[[32,38,36],[24,56,38]], h3:[[26,32,30],[18,46,30]], leaf:[[44,52,48],[48,112,62]]};
   const P=DARK?D:L, e=Math.pow(c,.8), M=k=>mix(P[k][0],P[k][1],e);
   let top=M("top"), mid=M("mid"), low=M("low");
   const h=new Date().getHours()+new Date().getMinutes()/60;
   const bell=(x,a,b)=>x<=a||x>=b?0:Math.sin(Math.PI*(x-a)/(b-a));
-  const eve=bell(h,16.5,22)*.5, morn=bell(h,5.5,10.5)*.35;
-  const warm=DARK?[78,60,72]:[236,206,186], gold=DARK?[60,58,50]:[240,226,196], dusk=DARK?[30,34,58]:[150,160,198];
-  low=mix(mix(low,warm,eve),gold,morn); mid=mix(mid,dusk,eve*.5);
-  return {top:rgb(top), mid:rgb(mid), low:rgb(low), h1:rgb(M("h1")), h2:rgb(M("h2")), leaf:rgb(M("leaf")),
-          sun:Math.max(0,(c-.15)/.85)*(DARK?.25:.9), smoke:.85*Math.pow(1-c,1.3), cloud:Math.min(1,.25+c*1.2)};
+  const eve=bell(h,16.5,22)*.45, morn=bell(h,5.5,10.5)*.3;
+  const warm=DARK?[78,60,72]:[255,214,184], gold=DARK?[60,58,50]:[255,238,196], dusk=DARK?[30,34,58]:[184,190,232];
+  low=mix(mix(low,warm,eve),gold,morn); mid=mix(mid,dusk,eve*.45);
+  const h1=M("h1");
+  return {top:rgb(top), mid:rgb(mid), low:rgb(low), h0:rgb(mix(h1,low,.45)), h1:rgb(h1), h2:rgb(M("h2")), h3:rgb(M("h3")), leaf:rgb(M("leaf")),
+          sun:Math.max(0,Math.min(1,(c-.12)*2.2)), smoke:.85*Math.pow(1-c,1.3), cloud:Math.min(1,.3+c*1.3),
+          star:DARK?Math.min(1,c*1.6):0, bird:DARK?0:Math.max(0,Math.min(1,(c-.3)*3))};
 }
 function paintSky(el, c){
   if(!el) return; const v=skyVars(c);
   el.style.setProperty("--sky-top",v.top); el.style.setProperty("--sky-mid",v.mid); el.style.setProperty("--sky-low",v.low);
   el.style.setProperty("--sun-o",v.sun.toFixed(3)); el.style.setProperty("--smoke-o",v.smoke.toFixed(3));
-  if(v.h1){ el.style.setProperty("--hill1",v.h1); el.style.setProperty("--hill2",v.h2); el.style.setProperty("--leaf",v.leaf); el.style.setProperty("--cloud-o",v.cloud.toFixed(3)); }
+  if(v.h1){ el.style.setProperty("--hill0",v.h0); el.style.setProperty("--hill1",v.h1); el.style.setProperty("--hill2",v.h2); el.style.setProperty("--hill3",v.h3); el.style.setProperty("--leaf",v.leaf);
+    el.style.setProperty("--cloud-o",v.cloud.toFixed(3)); el.style.setProperty("--star-o",v.star.toFixed(3)); el.style.setProperty("--bird-o",v.bird.toFixed(3)); }
 }
 const SMOKE='<div class="sun"></div><div class="smoke s1"></div><div class="smoke s2"></div><div class="smoke s3"></div><div class="smoke s4"></div>';
-const CLOUD='<svg viewBox="0 0 120 50" aria-hidden="true"><path d="M18 46h86a14 14 0 0 0 0-28 22 22 0 0 0-41-8 16 16 0 0 0-27 9A14 14 0 0 0 18 46z" fill="var(--cloud)"/></svg>';
+/* ---------- Dessins de l'accueil ---------- */
+const CLOUD='<svg viewBox="0 0 140 62" aria-hidden="true"><path transform="translate(0 4)" d="M22 56h96a17 17 0 0 0 3-33.7A25 25 0 0 0 74 10a19 19 0 0 0-33 9.5A18.5 18.5 0 0 0 22 56z" fill="var(--cloud-shade)"/><path d="M22 56h96a17 17 0 0 0 3-33.7A25 25 0 0 0 74 10a19 19 0 0 0-33 9.5A18.5 18.5 0 0 0 22 56z" fill="var(--cloud)"/><path d="M44 30a12 12 0 0 1 14-9" stroke="var(--cloud-hi)" stroke-width="3" stroke-linecap="round" fill="none"/></svg>';
 const CLOUDS=`<div class="cloud c1">${CLOUD}</div><div class="cloud c2">${CLOUD}</div><div class="cloud c3">${CLOUD}</div>`;
-/* Un arbre pousse sur les collines à chaque étape du corps franchie. */
-const TREE_X=[46,330,92,268,150,372,20,214,120,300,180,250];
+const SUN=`<div class="sunball" aria-hidden="true"><svg viewBox="0 0 200 200"><defs><radialGradient id="souffle-sun" cx="42%" cy="38%" r="65%"><stop offset="0" stop-color="#FFE38A"/><stop offset=".6" stop-color="#FFCB4D"/><stop offset="1" stop-color="#FDB833"/></radialGradient></defs>
+  <circle cx="100" cy="100" r="96" fill="#FFE7A0" opacity=".22"/><circle cx="100" cy="100" r="74" fill="#FFE7A0" opacity=".35"/><circle cx="100" cy="100" r="50" fill="url(#souffle-sun)"/></svg></div>
+  <div class="moon" aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="#DCE6EF" opacity=".12"/><circle cx="50" cy="50" r="30" fill="#E6EDF3"/><circle cx="41" cy="44" r="6" fill="#C9D5E0"/><circle cx="58" cy="60" r="4" fill="#C9D5E0"/><circle cx="60" cy="40" r="2.6" fill="#C9D5E0"/></svg></div>
+  <svg class="stars" viewBox="0 0 400 220" preserveAspectRatio="xMidYMin slice" aria-hidden="true">${[[30,40,1.4],[82,92,1],[128,26,1.2],[176,70,.9],[236,34,1.3],[262,110,.9],[316,58,1.1],[352,22,1],[372,128,1.2],[58,150,.9],[206,150,1],[150,190,.8]].map(([x,y,r],k)=>`<circle cx="${x}" cy="${y}" r="${r}" style="--k:${k}"/>`).join("")}</svg>
+  <svg class="birds" viewBox="0 0 120 40" aria-hidden="true"><path d="M8 22q6-7 12 0q6-7 12 0"/><path d="M44 12q5-6 10 0q5-6 10 0"/><path d="M30 34q4-5 8 0q4-5 8 0"/></svg>`;
+/* Un arbre pousse sur les collines à chaque étape du corps franchie : ronds, cyprès, buissons. */
+const TREES=[[44,0],[318,1],[92,2],[262,0],[146,1],[364,3],[18,2],[206,0],[122,3],[290,1],[176,2],[236,3]];
 function treesSVG(n){
-  return TREE_X.slice(0,n).map((x,k)=>{ const big=k%3!==1, y=big?66:72, r=big?11:8;
-    return `<g transform="translate(${x} ${y})"><g class="tree" style="--k:${k}"><rect x="-1.6" y="0" width="3.2" height="${big?14:11}" rx="1.6" fill="var(--trunk)"/><circle cx="0" cy="-2" r="${r}" fill="var(--leaf)"/><circle cx="${(-r*.35).toFixed(1)}" cy="${(-2-r*.35).toFixed(1)}" r="${(r*.45).toFixed(1)}" fill="var(--leaf-hi)"/></g></g>`; }).join("");
+  return TREES.slice(0,n).map(([x,t],k)=>{
+    const base=96+((k*7)%6);
+    const trunk=(h)=>`<rect x="-2.2" y="${-h}" width="4.4" height="${h+3}" rx="2" fill="var(--trunk)"/>`;
+    let g;
+    if(t===1) g=trunk(6)+`<ellipse cx="1.6" cy="-22" rx="7.2" ry="18" fill="var(--leaf-dark)"/><ellipse cx="-.5" cy="-23.5" rx="6" ry="17" fill="var(--leaf)"/><ellipse cx="-2.6" cy="-30" rx="1.8" ry="6.5" fill="var(--leaf-hi)"/>`;
+    else if(t===3) g=`<circle cx="2" cy="-6" r="9" fill="var(--leaf-dark)"/><circle cx="-.8" cy="-7.5" r="7.8" fill="var(--leaf)"/><circle cx="-3.6" cy="-10.5" r="2.4" fill="var(--leaf-hi)"/>`;
+    else { const r=t===2?10:13.5; g=trunk(11)+`<circle cx="2.4" cy="${-11-r*.95}" r="${r}" fill="var(--leaf-dark)"/><circle cx="-.8" cy="${-11-r*1.08}" r="${r*.9}" fill="var(--leaf)"/><circle cx="${-r*.42}" cy="${-11-r*1.45}" r="${r*.3}" fill="var(--leaf-hi)"/>`; }
+    return `<g transform="translate(${x} ${base})"><g class="tree" style="--k:${k}">${g}</g></g>`; }).join("");
 }
-const HILLS=`<svg class="hills" viewBox="0 0 400 110" preserveAspectRatio="none" aria-hidden="true">
-  <path d="M0 64 C60 40 120 44 190 58 S320 38 400 50 V110 H0Z" fill="var(--hill1)"/>
+/* L'éolienne : le souffle qui fait tourner les pales. */
+const MILL=`<g class="mill" transform="translate(336 64)"><path d="M-2.2 0 L2.2 0 L1.2 -46 L-1.2 -46 Z" fill="var(--mill)"/><g class="blades" transform="translate(0 -47)">
+  <path d="M0 0 C2 -8 2.6 -22 0 -30 C-2.4 -22 -2 -8 0 0Z" fill="var(--mill)"/><path d="M0 0 C2 -8 2.6 -22 0 -30 C-2.4 -22 -2 -8 0 0Z" fill="var(--mill)" transform="rotate(120)"/><path d="M0 0 C2 -8 2.6 -22 0 -30 C-2.4 -22 -2 -8 0 0Z" fill="var(--mill)" transform="rotate(240)"/>
+  <circle r="2.6" fill="var(--mill-hub)"/></g></g>`;
+const HILLS=`<svg class="hills" viewBox="0 0 400 150" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+  <path d="M0 70 C60 50 128 52 200 64 S330 44 400 56 V150 H0Z" fill="var(--hill0)"/>
+  ${MILL}
+  <path d="M0 92 C55 74 125 72 196 84 S326 70 400 80 V150 H0Z" fill="var(--hill1)"/>
   <g id="trees"></g>
-  <path d="M0 86 C80 70 150 74 230 84 S340 72 400 78 V110 H0Z" fill="var(--hill2)"/></svg>`;
+  <path d="M0 116 C88 100 168 104 248 113 S358 104 400 108 V150 H0Z" fill="var(--hill2)"/>
+  <path d="M0 136 C110 126 220 130 400 128 V150 H0Z" fill="var(--hill3)"/>
+  <path d="M150 150 C168 136 200 124 238 117 S304 109 342 107" fill="none" stroke="var(--path)" stroke-width="4" stroke-linecap="round" opacity=".85"/></svg>`;
 
 /* ---------- Aujourd'hui (esprit Météo) ---------- */
 function viewToday(){
@@ -341,7 +363,7 @@ function viewToday(){
   const go=(label)=>`<span class="go">${label}${icon("chevron",13)}</span>`;
   return `
   <main class="today">
-    <section class="scene" id="sky">${SMOKE}${CLOUDS}
+    <section class="scene" id="sky">${SUN}<div class="smoke s1"></div><div class="smoke s2"></div><div class="smoke s3"></div><div class="smoke s4"></div>${CLOUDS}
       <header class="hero ${HERO_ENTER?"enter":""}" id="hero"></header>${HILLS}</section>
     <div class="stagger">
       <section class="glass tone-sun" ${I()} aria-label="Argent économisé">
@@ -416,7 +438,7 @@ function tick(){
       if(HERO_ENTER) countUp(document.getElementById("t-days"),d); else { const e=document.getElementById("t-days"); e.textContent=String(d); e.dataset.done=1; }
     }
     const de=document.getElementById("t-days"); if(de&&de.dataset.done) set("t-days",String(d));
-    set("t-du",`${plural(d,"jour","jours")} sans fumer`);
+    { const du=document.getElementById("t-du"), txt=`${plural(d,"jour","jours")} <b>sans fumer</b>`; if(du && du.innerHTML!==txt) du.innerHTML=txt; }
     set("t-clock",clock(s.el));
     set("t-steps",`${n} ${plural(n,"étape","étapes")} du corps sur ${MILESTONES.length}`);
     const tg=document.getElementById("trees"); if(tg && tg.dataset.n!==String(n)){ tg.dataset.n=String(n); tg.innerHTML=treesSVG(n); }
