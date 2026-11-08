@@ -329,6 +329,10 @@ function viewToday(){
         <section class="glass"><div class="gh">${icon("nocig")} ${w.Many} évitées</div><div class="gmid tnum" id="t-cigs"></div><div class="gsub" id="t-packs"></div></section>
         <section class="glass"><div class="gh">${icon("heart")} Vie regagnée</div><div class="gmid" id="t-life"></div><div class="gsub">estimation, ~${MIN_PER_CIG_LIFE} min par ${w.one}</div></section>
       </div>
+      ${S.health.baseline && new Date().getHours()>=18 && !S.health.entries[dayKey()]?`<section class="glass" ${I()} aria-label="Mesures du soir"><div class="gh">${icon("heart")} Tes mesures du soir</div>
+        <div class="gsub" style="margin:4px 0 12px">Ta montre les a copiées à 18 h. Un toucher pour les ajouter.</div>
+        <button class="btn air" data-act="hpaste">${icon("download",20)} Coller les mesures</button>
+        <a class="btn soft" style="margin-top:8px" href="${SYNC_URL}">${icon("heart",20)} Relire ma montre</a></section>`:""}
       <button class="glass" ${I()} data-goto="prog" data-prog="body"><div class="gh">${icon("lungs")} Ton corps ${go("Tout voir")}</div><div id="t-next"></div></button>
       ${mission?`<section class="glass" ${I()}><div class="gh">${icon("check")} Mission du jour ${day} <button class="go" data-goto="prog" data-prog="plan">Programme${icon("chevron",13)}</button></div>
         <div class="row" style="align-items:flex-start"><div class="grow"><div class="h3">${esc(mission.title)}</div><div class="gtext" style="margin-top:4px">${esc(mission.text)}</div></div>
@@ -632,6 +636,7 @@ function shortcutGuide(){
   return `<ol class="small" style="padding-left:20px;margin:12px 0 0;line-height:1.55">
     <li style="margin:8px 0"><a href="Souffle%20Sant%C3%A9.shortcut" download><b>Installe le raccourci « Souffle Santé »</b></a>, puis touche <b>Ajouter le raccourci</b>.</li>
     <li style="margin:8px 0">Touche <b>1. Lire ma montre</b> et autorise l'accès à Santé, puis reviens ici et touche <b>2. Coller les mesures</b>.</li>
+    <li style="margin:8px 0">Chaque soir : Raccourcis › <b>Automatisation</b> › <b>＋</b> › <b>Heure de la journée</b>, 18:00, Quotidien, <b>Exécuter immédiatement</b>, raccourci <b>Souffle Santé</b>. Le soir, Souffle te propose de coller sur l'accueil.</li>
     <li style="margin:8px 0">Changement d'appareil ou d'icône : <b>Toi › Copier toutes mes données</b>, puis dans la nouvelle Souffle <b>Toi › Coller mes données</b>.</li></ol>`;
 }
 function viewHealth(){
