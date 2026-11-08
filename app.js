@@ -338,8 +338,8 @@ function treesSVG(n){
     return `<g transform="translate(${x} ${base})"><g class="tree" style="--k:${k}">${g}</g></g>`; }).join("");
 }
 /* L'éolienne : le souffle qui fait tourner les pales. */
-const MILL=`<g class="mill" transform="translate(74 62) scale(.78)"><path d="M-2.2 0 L2.2 0 L1.2 -46 L-1.2 -46 Z" fill="var(--mill)"/><g class="blades" transform="translate(0 -47)">
-  <path d="M0 0 C2 -8 2.6 -22 0 -30 C-2.4 -22 -2 -8 0 0Z" fill="var(--mill)"/><path d="M0 0 C2 -8 2.6 -22 0 -30 C-2.4 -22 -2 -8 0 0Z" fill="var(--mill)" transform="rotate(120)"/><path d="M0 0 C2 -8 2.6 -22 0 -30 C-2.4 -22 -2 -8 0 0Z" fill="var(--mill)" transform="rotate(240)"/>
+const MILL=`<g class="mill" transform="translate(74 62) scale(.78)"><path d="M-2.2 0 L2.2 0 L1.2 -46 L-1.2 -46 Z" fill="var(--mill)"/><g transform="translate(0 -47)"><g class="blades">${matchMedia("(prefers-reduced-motion: reduce)").matches?"":'<animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="7s" repeatCount="indefinite"/>'}
+  <path d="M0 0 C2 -8 2.6 -22 0 -30 C-2.4 -22 -2 -8 0 0Z" fill="var(--mill)"/><path d="M0 0 C2 -8 2.6 -22 0 -30 C-2.4 -22 -2 -8 0 0Z" fill="var(--mill)" transform="rotate(120)"/><path d="M0 0 C2 -8 2.6 -22 0 -30 C-2.4 -22 -2 -8 0 0Z" fill="var(--mill)" transform="rotate(240)"/></g>
   <circle r="2.6" fill="var(--mill-hub)"/></g></g>`;
 const HILLS=`<svg class="hills" viewBox="0 0 400 150" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
   <path d="M0 70 C60 50 128 52 200 64 S330 44 400 56 V150 H0Z" fill="var(--hill0)"/>

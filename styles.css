@@ -181,13 +181,12 @@ textarea.inp{resize:none;min-height:50px;line-height:1.35}
 .cloud.c3{width:112px;right:-22px;top:calc(var(--st) + 262px);animation:float 80s ease-in-out infinite alternate}
 @keyframes float{from{transform:translateX(-14px)}to{transform:translateX(22px)}}
 .hills{position:absolute;left:0;right:0;bottom:-1px;width:100%;height:var(--hills-h);display:block}
-.mill .blades{transform-box:view-box;animation:spin 7s linear infinite}
-@keyframes spin{from{rotate:0deg}to{rotate:360deg}}
+
 .hills path{transition:fill 1.2s var(--ease)}
 @media (min-width:640px){.scene{margin:16px 0 20px;border-radius:28px;box-shadow:0 1px 2px rgba(23,50,70,.06),0 10px 30px rgba(47,116,181,.12)}}
 .tree{transform-box:fill-box;transform-origin:50% 100%;animation:sprout 1.4s var(--ease) both;animation-delay:calc(var(--k,0)*90ms + 300ms)}
 @keyframes sprout{from{transform:scale(0);opacity:0}to{transform:none;opacity:1}}
-@media (prefers-reduced-motion:reduce){.smoke,.cloud,.tree,.birds,.stars circle,.mill .blades{animation:none}}
+@media (prefers-reduced-motion:reduce){.smoke,.cloud,.tree,.birds,.stars circle{animation:none}}
 
 .today{position:relative;z-index:1;color:var(--ink);max-width:600px;margin:0 auto;padding:0 16px calc(var(--tabh) + var(--sb) + 104px)}
 .hero{position:relative;z-index:2;text-align:center;color:#173B57;padding:calc(var(--st) + 30px) 16px calc(var(--hills-h) + 14px);--num:#1F6FB4;--green:#2F8F3E}
