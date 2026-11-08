@@ -591,7 +591,15 @@ function viewProgress(){
 /* ---------- Santé ---------- */
 const SITE_URL=location.origin+location.pathname;
 function shortcutGuide(){
-  return `<ol class="small" style="padding-left:20px;margin:8px 0 0;line-height:1.55">
+  return `<a class="btn air" style="margin-top:12px" href="Souffle.shortcut" download="Souffle.shortcut">${icon("download",20)} Installer le Raccourci Souffle</a>
+    <ol class="small" style="padding-left:20px;margin:12px 0 0;line-height:1.55">
+    <li style="margin:8px 0">Touche le bouton ci-dessus. Si Safari le télécharge, ouvre-le depuis les téléchargements (flèche ↓), puis <b>Ajouter le raccourci</b>.</li>
+    <li style="margin:8px 0">Dans <b>Raccourcis</b>, lance <b>Souffle</b> une fois et autorise l'accès à Santé (pouls au repos, variabilité, oxygène, respiration, pas) et l'ouverture du site.</li>
+    <li style="margin:8px 0">Appui long sur le raccourci, <b>Détails</b> (ⓘ), puis <b>Ajouter à l'écran d'accueil</b>, avec l'icône Souffle. Chaque ouverture met tes données à jour.</li>
+    <li style="margin:8px 0">En option : onglet <b>Automatisation</b>, <b>Heure de la journée</b>, 21:00, <b>Exécuter immédiatement</b>, raccourci Souffle.</li></ol>
+    <a class="btn soft" style="margin-top:14px" href="icone-raccourci.png" target="_blank" rel="noopener">${icon("download",20)} Icône Souffle (appui long, Enregistrer)</a>
+    <details style="margin-top:14px"><summary class="small ink2">Le faire à la main</summary>
+    <ol class="small" style="padding-left:20px;margin:8px 0 0;line-height:1.55">
     <li style="margin:8px 0">Ouvre l'app <b>Raccourcis</b>, touche <b>＋</b> et nomme le raccourci <b>Souffle</b>.</li>
     <li style="margin:8px 0">Ajoute <b>Rechercher des échantillons de santé</b>. Type : <b>Fréquence cardiaque au repos</b>. Filtre : <b>Date de début est dans les derniers 7 jours</b>.</li>
     <li style="margin:8px 0">Juste dessous, ajoute <b>Calculer les statistiques</b>, puis <b>Moyenne</b>. Son résultat, c'est <i>Moyenne 1</i>.</li>
@@ -601,14 +609,13 @@ function shortcutGuide(){
       <code style="display:block;margin-top:8px;padding:12px;border-radius:12px;background:var(--paper2);font-size:12.5px;word-break:break-all;user-select:all;-webkit-user-select:all">${esc(SITE_URL)}#rhr=[Moyenne 1]&amp;hrv=[Moyenne 2]&amp;o2=[Moyenne 3]&amp;rr=[Moyenne 4]&amp;pas7=[Somme]</code></li>
     <li style="margin:8px 0">Ajoute <b>Ouvrir les URL</b>. Lance le raccourci une fois et autorise l'accès à Santé.</li>
     <li style="margin:8px 0">Touche <b>ⓘ</b>, puis <b>Ajouter à l'écran d'accueil</b>, avec l'icône Souffle. Cette icône devient ton appli : chaque ouverture met tes données à jour.</li>
-    <li style="margin:8px 0">En option : <b>Automatisation</b>, <b>Heure de la journée</b>, 21:00, <b>Exécuter immédiatement</b>, raccourci Souffle.</li></ol>
-    <a class="btn soft" style="margin-top:14px" href="icone-raccourci.png" target="_blank" rel="noopener">${icon("download",20)} Icône Souffle (appui long, Enregistrer)</a>`;
+    <li style="margin:8px 0">En option : <b>Automatisation</b>, <b>Heure de la journée</b>, 21:00, <b>Exécuter immédiatement</b>, raccourci Souffle.</li></ol></details>`;
 }
 function viewHealth(){
   const keys=Object.keys(S.health.entries).sort(), b=S.health.baseline;
   let h=`<div class="page"><div class="head"><h1 class="h1">Santé</h1>`;
   if(!keys.length){
-    return h+`<p class="lead">Ton corps change avant que tu le sentes. Relie ton Apple Watch en 5 minutes avec un Raccourci iPhone.</p></div>
+    return h+`<p class="lead">Ton corps change avant que tu le sentes. Relie ton Apple Watch en 2 minutes : un Raccourci tout prêt s'en charge.</p></div>
       <div class="block"><div class="h3">Mise en place</div>${shortcutGuide()}</div>
       <p class="meta" style="padding:12px 6px">Les valeurs passent dans la fin de l'adresse, après le #. Cette partie n'est jamais envoyée à un serveur : tout reste sur ton iPhone.</p></div>`;
   }
