@@ -640,7 +640,7 @@ function viewHealth(){
   if(!keys.length){
     return h+`<p class="lead">Ton corps change avant que tu le sentes. Relie ton Apple Watch : un raccourci lit tes mesures et les envoie ici.</p></div>
       <div class="block">${syncButton()}<div class="h3" style="margin-top:16px">Mise en place</div>${shortcutGuide()}</div>
-      <p class="meta" style="padding:12px 6px">Les valeurs passent dans la fin de l'adresse, après le #. Cette partie n'est jamais envoyée à un serveur : tout reste sur ton iPhone.</p></div>`;
+      <p class="meta" style="padding:12px 6px">Tes mesures passent par le presse-papiers de ton iPhone. Rien n'est envoyé à un serveur.</p></div>`;
   }
   const last=S.health.entries[keys[keys.length-1]];
   let impr=0, comp=0;
