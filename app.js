@@ -1324,3 +1324,23 @@ try{ navigator.storage&&navigator.storage.persist&&navigator.storage.persist(); 
 
 importFromHash();
 render();
+
+/* Mise à jour automatique : l'iPhone garde la page en cache. À l'ouverture et au retour
+   dans l'appli, on lit la version publiée ; si elle est plus récente, on recharge par une
+   adresse neuve (qui contourne le cache), puis on nettoie l'adresse. */
+(function(){
+  const cur=(document.querySelector('script[src*="app.js"]')?.src.match(/[?&]v=(\d+)/)||[])[1];
+  if(location.search.includes("maj=")) history.replaceState(null,"",location.pathname+location.hash);
+  async function check(){
+    try{
+      const r=await fetch("index.html?t="+Date.now(),{cache:"no-store"}); if(!r.ok) return;
+      const v=((await r.text()).match(/app\.js\?v=(\d+)/)||[])[1];
+      if(v && cur && +v>+cur && !sessionStorage.getItem("souffle.maj."+v)){
+        sessionStorage.setItem("souffle.maj."+v,"1");
+        location.replace(location.pathname+"?maj="+v+location.hash);
+      }
+    }catch(_){}
+  }
+  check();
+  document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") check(); });
+})();
