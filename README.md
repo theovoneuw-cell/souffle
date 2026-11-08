@@ -8,11 +8,13 @@ Web app autonome (un seul `index.html`), sans compte ni serveur : tout est stock
 
 ## Ce qu'elle fait
 
-- **Aujourd'hui** : compteur live à la seconde, € économisés, cigarettes pas fumées, vie regagnée (estimation ~20 min/cigarette, UCL 2024), prochaine étape, tes raisons, ta récompense.
-- **SOS « J'ai envie de fumer »** : 3 min de respiration guidée (4-4-6), tes raisons et tes chiffres qui défilent. L'envie est notée comme vaincue ou comme faux pas.
-- **Ton corps** : les 12 étapes de récupération, de 20 min à 15 ans.
-- **Santé** : pouls au repos, variabilité cardiaque, oxygène, fréquence respiratoire et pas, envoyés par l'Apple Watch via un Raccourci iPhone. Courbes et comparaison avec ta première mesure.
-- **Toi** : réglages, raisons, récompense, sauvegarde/restauration, Tabac Info Service (39 89).
+- **Aujourd'hui** : un ciel enfumé qui se dégage au fil des jours, compteur à la seconde, argent économisé, cigarettes évitées, vie regagnée, mission du jour, prochaine étape du corps, tes raisons, tes objectifs d'épargne, tes derniers trophées.
+- **SOS « J'ai envie de fumer »** : respiration guidée (4-4-6), « surfer l'envie », mini-jeu anti-envie, 16 techniques. L'envie est ensuite notée avec son intensité et son déclencheur.
+- **Journal** : envies, cigarettes fumées et substituts. Les cigarettes fumées sont déduites des chiffres, pour qu'ils restent honnêtes.
+- **Stats** : bilan, envies par jour, heures et jours à risque, déclencheurs, intensité, substituts, argent cumulé avec projection, conseils tirés de tes données.
+- **Progrès** : les 12 étapes du corps, 63 trophées, le programme de 30 jours (une mission par jour), et une carte de progrès à partager en image.
+- **Santé** : pouls au repos, variabilité cardiaque, oxygène, fréquence respiratoire et pas, envoyés par l'Apple Watch via un Raccourci iPhone.
+- **Toi** : réglages, raisons, plusieurs objectifs d'épargne, thème clair/sombre/auto, sauvegarde/restauration, Tabac Info Service (39 89).
 
 ## Brancher l'Apple Watch (Raccourci iPhone)
 
