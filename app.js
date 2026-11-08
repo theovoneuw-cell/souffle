@@ -8,6 +8,7 @@ const KEY = "souffle.v1";
 const MIN_PER_CIG_LIFE = 20;   // estimation UCL 2024
 const MIN_PER_CIG_SMOKE = 6;   // temps moyen passé à fumer une cigarette (estimation)
 
+const ROLL_DEFAULTS={pouchPrice:22, perPouch:45, extrasMonth:5};
 function blank(){
   return {v:2, profile:null, log:[], missions:{}, seen:{}, best:{game:0},
           health:{entries:{}, baseline:null}, ui:{tab:"today", range:"30", prog:"body"}, theme:"auto"};
@@ -35,12 +36,20 @@ function migrate(s){
   o.v=2;
   return o;
 }
+/* Chargement prudent : une copie brute est gardée avant toute migration,
+   et en cas d'erreur les données ne sont jamais écrasées. */
+let LOAD_FAILED=false;
 function load(){
-  try{ const s=JSON.parse(localStorage.getItem(KEY)); if(s&&typeof s==="object") return migrate(s); }catch(e){}
+  let raw=null;
+  try{ raw=localStorage.getItem(KEY); }catch(e){}
+  if(!raw) return blank();
+  try{ localStorage.setItem(KEY+".prev", raw); }catch(e){}
+  try{ const s=JSON.parse(raw); if(s&&typeof s==="object") return migrate(s); }
+  catch(e){ LOAD_FAILED=true; try{ localStorage.setItem(KEY+".rescue-"+Date.now(), raw); }catch(_){} console.error(e); }
   return blank();
 }
 let S = load();
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+function save(){ if(LOAD_FAILED) return; try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
 save();
 
 /* Thème */
@@ -103,7 +112,6 @@ function W(p=S.profile){
     ? {one:"roulée", One:"Roulée", many:"roulées", Many:"Roulées", packs:"blagues"}
     : {one:"cigarette", One:"Cigarette", many:"cigarettes", Many:"Cigarettes", packs:"paquets"};
 }
-const ROLL_DEFAULTS={pouchPrice:22, perPouch:45, extrasMonth:5};
 function habitsHTML(d, mode){
   const ob=mode==="ob", A=ob?"data-o":"data-f";
   const st=(f,l,a,b)=> ob?obStepper(f,l,a,b):stepper(f,l,a,b,d[f]);
