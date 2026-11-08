@@ -305,7 +305,7 @@ function skyVars(c){
   const warm=DARK?[78,60,72]:[255,214,184], gold=DARK?[60,58,50]:[255,238,196], dusk=DARK?[30,34,58]:[184,190,232];
   low=mix(mix(low,warm,eve),gold,morn); mid=mix(mid,dusk,eve*.45);
   const h1=M("h1");
-  return {top:rgb(top), mid:rgb(mid), low:rgb(low), h0:rgb(mix(h1,low,.45)), h1:rgb(h1), h2:rgb(M("h2")), h3:rgb(M("h3")), leaf:rgb(M("leaf")),
+  return {top:rgb(top), mid:rgb(mid), low:rgb(low), h0:rgb(mix(h1,low,.28)), h1:rgb(h1), h2:rgb(M("h2")), h3:rgb(M("h3")), leaf:rgb(M("leaf")),
           sun:Math.max(0,Math.min(1,(c-.12)*2.2)), smoke:.85*Math.pow(1-c,1.3), cloud:Math.min(1,.3+c*1.3),
           star:DARK?Math.min(1,c*1.6):0, bird:DARK?0:Math.max(0,Math.min(1,(c-.3)*3))};
 }
@@ -338,7 +338,7 @@ function treesSVG(n){
     return `<g transform="translate(${x} ${base})"><g class="tree" style="--k:${k}">${g}</g></g>`; }).join("");
 }
 /* L'éolienne : le souffle qui fait tourner les pales. */
-const MILL=`<g class="mill" transform="translate(336 64)"><path d="M-2.2 0 L2.2 0 L1.2 -46 L-1.2 -46 Z" fill="var(--mill)"/><g class="blades" transform="translate(0 -47)">
+const MILL=`<g class="mill" transform="translate(74 62) scale(.78)"><path d="M-2.2 0 L2.2 0 L1.2 -46 L-1.2 -46 Z" fill="var(--mill)"/><g class="blades" transform="translate(0 -47)">
   <path d="M0 0 C2 -8 2.6 -22 0 -30 C-2.4 -22 -2 -8 0 0Z" fill="var(--mill)"/><path d="M0 0 C2 -8 2.6 -22 0 -30 C-2.4 -22 -2 -8 0 0Z" fill="var(--mill)" transform="rotate(120)"/><path d="M0 0 C2 -8 2.6 -22 0 -30 C-2.4 -22 -2 -8 0 0Z" fill="var(--mill)" transform="rotate(240)"/>
   <circle r="2.6" fill="var(--mill-hub)"/></g></g>`;
 const HILLS=`<svg class="hills" viewBox="0 0 400 150" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
@@ -1170,7 +1170,7 @@ const PH=["Retrouver du souffle pour mes ateliers","Ne plus sentir la cigarette"
 function renderOnboarding(){
   const d=OB.d, st=OB.step, N=5;
   let body="";
-  if(st===0) body=`<div class="welcome-sky sky" id="wsky">${SMOKE}<img src="logo.png" alt="" width="92" height="92"></div>
+  if(st===0) body=`<div class="welcome-sky sky" id="wsky">${SMOKE}${CLOUDS}${HILLS}<img src="logo.png" alt="" width="92" height="92"></div>
     <h1 class="h1" style="font-size:42px">Souffle.</h1>
     <p class="lead">Le ciel est enfumé. À chaque heure sans cigarette, il se dégage un peu. Cette appli est faite pour une seule personne : toi. Pas de compte, rien ne quitte ton téléphone.</p>
     <label class="field"><span>Ton prénom</span><input class="inp" data-o="firstName" autocomplete="given-name" value="${esc(d.firstName)}"></label>`;

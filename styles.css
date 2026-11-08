@@ -37,6 +37,9 @@
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+::selection{background:var(--air-soft);color:var(--ink)}
+input,textarea{caret-color:var(--air)}
+input,select,progress{accent-color:var(--air)}
 html,body{margin:0;background:var(--bg);color:var(--ink)}
 body{font:16px/1.5 var(--text);letter-spacing:-.005em;-webkit-font-smoothing:antialiased;min-height:100dvh;overscroll-behavior-y:none;-webkit-text-size-adjust:100%}
 button,input,textarea,select{font:inherit;color:inherit;letter-spacing:inherit}
@@ -144,14 +147,14 @@ textarea.inp{resize:none;min-height:50px;line-height:1.35}
    Ciel aux couleurs du logo, fumée qui se change en nuages, soleil, collines
    vert sauge. Un arbre pousse à chaque étape du corps franchie. */
 .skybg{position:fixed;inset:0;z-index:0;overflow:hidden;background:linear-gradient(180deg,var(--sky-top,#707E86) 0%,var(--sky-mid,#8A9196) 55%,var(--sky-low,#B0B5B8) 100%)}
-.scene{position:relative;overflow:hidden;margin:0 -16px 18px;min-height:calc(var(--st) + 460px);display:flex;flex-direction:column;
+.scene{--hills-h:max(178px,calc(min(100vw,632px)*.375));position:relative;overflow:hidden;margin:0 -16px 18px;min-height:calc(var(--st) + 460px);display:flex;flex-direction:column;
   background:linear-gradient(180deg,var(--sky-top,#707E86) 0%,var(--sky-mid,#8A9196) 52%,var(--sky-low,#B0B5B8) 100%);
   --cloud:#FFFFFF;--cloud-shade:#DCEBF7;--cloud-hi:rgba(255,255,255,0);--trunk:#8C6A4F;--leaf-hi:rgba(255,255,255,.28);
   --hill0:#CDE6D2;--hill1:#B0E09C;--hill2:#80CB74;--hill3:#5CB45E;--leaf:#40A04A;--leaf-dark:color-mix(in srgb,var(--leaf) 70%,#0E2A14);--path:#F3E7C9;--mill:#FFFFFF;--mill-hub:#D7E3EC}
 :root[data-theme="dark"] .scene{--cloud:#2B3B4C;--cloud-shade:#1E2A37;--trunk:#4E4036;--leaf-hi:rgba(255,255,255,.07);--path:#3E4740;--mill:#9FB2C2;--mill-hub:#6F8597}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .scene{--cloud:#2B3B4C;--cloud-shade:#1E2A37;--trunk:#4E4036;--leaf-hi:rgba(255,255,255,.07);--path:#3E4740;--mill:#9FB2C2;--mill-hub:#6F8597}}
 .sunball,.moon{position:absolute;pointer-events:none;opacity:var(--sun-o,0)}
-.sunball{width:178px;right:-48px;top:calc(var(--st) + 92px)}
+.sunball{width:172px;right:-74px;top:calc(var(--st) + 70px)}
 .moon{width:92px;right:14px;top:calc(var(--st) + 120px);display:none}
 .sunball svg,.moon svg{display:block;width:100%;height:auto}
 .stars{position:absolute;left:0;top:0;width:100%;height:calc(var(--st) + 230px);opacity:var(--star-o,0);pointer-events:none}
@@ -176,16 +179,17 @@ textarea.inp{resize:none;min-height:50px;line-height:1.35}
 .cloud.c2{width:96px;left:4%;top:calc(var(--st) + 26px);animation:float 90s ease-in-out infinite alternate-reverse}
 .cloud.c3{width:112px;right:-22px;top:calc(var(--st) + 262px);animation:float 80s ease-in-out infinite alternate}
 @keyframes float{from{transform:translateX(-14px)}to{transform:translateX(22px)}}
-.hills{position:absolute;left:0;right:0;bottom:-1px;width:100%;height:178px;display:block}
+.hills{position:absolute;left:0;right:0;bottom:-1px;width:100%;height:var(--hills-h);display:block}
 .mill .blades{transform-box:view-box;animation:spin 7s linear infinite}
 @keyframes spin{from{rotate:0deg}to{rotate:360deg}}
 .hills path{transition:fill 1.2s var(--ease)}
+@media (min-width:640px){.scene{margin:16px 0 20px;border-radius:28px;box-shadow:0 1px 2px rgba(23,50,70,.06),0 10px 30px rgba(47,116,181,.12)}}
 .tree{transform-box:fill-box;transform-origin:50% 100%;animation:sprout 1.4s var(--ease) both;animation-delay:calc(var(--k,0)*90ms + 300ms)}
 @keyframes sprout{from{transform:scale(0);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){.smoke,.cloud,.tree,.birds,.stars circle,.mill .blades{animation:none}}
 
 .today{position:relative;z-index:1;color:var(--ink);max-width:600px;margin:0 auto;padding:0 16px calc(var(--tabh) + var(--sb) + 104px)}
-.hero{position:relative;z-index:2;text-align:center;color:#173B57;padding:calc(var(--st) + 30px) 16px 190px;--num:#1F6FB4;--green:#2F8F3E}
+.hero{position:relative;z-index:2;text-align:center;color:#173B57;padding:calc(var(--st) + 30px) 16px calc(var(--hills-h) + 14px);--num:#1F6FB4;--green:#2F8F3E}
 :root[data-theme="dark"] .hero{color:#EAF3FA;--num:#9CCBF2;--green:#8FD48C}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .hero{color:#EAF3FA;--num:#9CCBF2;--green:#8FD48C}}
 .hero .who{font-family:var(--display);font-size:20px;font-weight:500;letter-spacing:0}
@@ -209,6 +213,8 @@ textarea.inp{resize:none;min-height:50px;line-height:1.35}
 .gh .go .ico{width:13px;height:13px;padding:0;background:none;color:inherit;border-radius:0}
 .tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .tiles .glass{min-height:150px;display:flex;flex-direction:column}
+.tiles .gh{gap:9px;font-size:15px;line-height:1.2}
+.tiles .gh .ico{width:34px;height:34px;padding:8px;border-radius:11px}
 .gbig{font-family:var(--display);font-size:40px;font-weight:600;line-height:1.05;letter-spacing:-.02em}
 .gmid{font-family:var(--display);font-size:30px;font-weight:600;line-height:1.1;letter-spacing:-.015em}
 .gsub{font-size:14px;color:var(--ink2);margin-top:auto;padding-top:8px;line-height:1.35}
@@ -225,7 +231,11 @@ textarea.inp{resize:none;min-height:50px;line-height:1.35}
 
 /* Bienvenue */
 .sky{position:relative;overflow:hidden;background:linear-gradient(180deg,var(--sky-top,#687076),var(--sky-mid,#80888D) 55%,var(--sky-low,#989FA3))}
-.welcome-sky{border-radius:22px;height:220px;margin-bottom:26px;display:grid;place-items:center}
+.welcome-sky{border-radius:24px;height:240px;margin-bottom:26px;display:grid;place-items:center;--st:0px;--hills-h:96px;
+  --cloud:#FFFFFF;--cloud-shade:#DCEBF7;--cloud-hi:rgba(255,255,255,0);--trunk:#8C6A4F;--leaf-hi:rgba(255,255,255,.28);--hill0:#C6D2C8;--hill1:#B9C7B4;--hill2:#9DB099;--hill3:#86A083;--leaf:#40A04A;--leaf-dark:#2F7A38;--path:#EDE4CD;--mill:#FFFFFF;--mill-hub:#D7E3EC}
+.welcome-sky .hills{height:96px} .welcome-sky .mill{display:none}
+.welcome-sky .cloud.c1{top:120px;left:-30px;width:96px} .welcome-sky .cloud.c2{top:18px;left:8%;width:70px} .welcome-sky .cloud.c3{top:40px;right:-14px;width:84px}
+.welcome-sky img{margin-bottom:56px}
 .welcome-sky img{position:relative;z-index:2;width:92px;height:92px;border-radius:22px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
 
 /* ---------- Étapes du corps ---------- */
