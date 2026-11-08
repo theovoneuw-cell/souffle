@@ -18,7 +18,7 @@ Web app autonome (HTML, CSS et JavaScript, sans dépendance), sans compte ni ser
 
 ## Brancher l'Apple Watch (Raccourci iPhone)
 
-**Le plus simple** : Santé › **Installer le Raccourci Souffle** (fichier `Souffle.shortcut`, déjà réglé), puis le lancer une fois pour autoriser Santé. La méthode à la main reste ci-dessous.
+**Le plus simple** : installer `Souffle Montre.shortcut` (déjà réglé), puis Santé › **Mettre à jour avec ma montre**. Pour l'écran d'accueil, ajouter Souffle depuis Safari en décochant « Ouvrir en tant qu'app web » : l'icône partage alors les données de Safari. La méthode à la main ci-dessous est l'ancienne version.
 
 Une web app ne peut pas lire l'app Santé directement. Un Raccourci le fait à sa place, puis ouvre Souffle avec les valeurs dans l'adresse, après le `#`. Cette partie de l'adresse n'est jamais envoyée à un serveur.
 
