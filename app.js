@@ -745,8 +745,8 @@ let SOS=null;
 function openSOS(){
   const el=document.createElement("div"); el.className="sos"; el.id="sos";
   document.body.appendChild(el);
-  SOS={mode:"breath", start:performance.now(), raf:0, ph:-1, enc:-1, done:false, entry:null, game:null, tip:Math.floor(Math.random()*TECHNIQUES.length)};
-  renderSOS(); buzz(25);
+  SOS={mode:"coach", start:performance.now(), raf:0, ph:-1, enc:-1, done:false, entry:null, game:null, tip:Math.floor(Math.random()*TECHNIQUES.length), coach:newCoach()};
+  renderSOS(); buzz(25); cStart();
 }
 function sosLines(){
   const p=S.profile, s=stats(), L=["Une envie dure 3 à 5 minutes. Tu es déjà dedans."];
@@ -762,7 +762,8 @@ function renderSOS(){
   if(SOS.entry){ el.innerHTML=sosResultHTML(); return; }
   const m=SOS.mode;
   let stage="";
-  if(m==="breath") stage=`<div class="breath"><div class="o g"></div><div class="o f" id="bf"></div><div class="lbl"><span id="bl">Inspire</span><span class="n" id="bn">4</span></div></div>
+  if(m==="coach") stage=`<div class="coach"><div class="chat" id="cchat"></div><div class="cchoices" id="cchoices"></div></div>`;
+  else if(m==="breath") stage=`<div class="breath"><div class="o g"></div><div class="o f" id="bf"></div><div class="lbl"><span id="bl">Inspire</span><span class="n" id="bn">4</span></div></div>
      <div class="enc" id="enc" style="margin-top:26px"></div>`;
   else if(m==="surf") stage=`<svg class="wave" viewBox="0 0 400 90" preserveAspectRatio="none"><path id="wv" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="3" stroke-linecap="round"/></svg>
      <div class="surf" id="surf"></div>`;
@@ -774,11 +775,14 @@ function renderSOS(){
       <button class="btn white sm" style="margin-top:18px" data-act="sostip">Une autre technique</button>`; }
   el.innerHTML=`<div class="top"><button class="icon-btn" data-act="sosclose" aria-label="Fermer">${icon("x",20)}</button>
       <span class="tnum" id="sr" style="font-weight:650;font-size:17px">3:00</span></div>
-    <div class="seg full" style="margin-top:12px">${[["breath","Respirer"],["surf","Surfer"],["game","Jeu"],["tip","Astuces"]].map(([k,l])=>`<button class="${m===k?"on":""}" data-act="sosmode" data-v="${k}">${l}</button>`).join("")}</div>
-    <div class="stage">${stage}</div>
-    <button class="btn white" data-act="sosok" id="sok">C'est passé, je n'ai pas fumé</button>
-    <button class="ghost" data-act="sosslip">J'ai fumé</button>`;
+    <div class="seg full sosmodes" style="margin-top:12px">${[["coach","Coach"],["breath","Respirer"],["surf","Surfer"],["game","Jeu"],["tip","Astuces"]].map(([k,l])=>`<button class="${m===k?"on":""}" data-act="sosmode" data-v="${k}">${l}</button>`).join("")}</div>
+    <div class="stage ${m==="coach"?"stage-coach":""}">${stage}</div>
+    ${m==="coach"?`<div class="row" style="justify-content:center;gap:22px"><button class="ghost" style="margin:6px 0 0" data-act="sosok">C'est passé</button><button class="ghost" style="margin:6px 0 0" data-act="sosslip">J'ai fumé</button></div>`
+      :`<button class="btn white" data-act="sosok" id="sok">C'est passé, je n'ai pas fumé</button>
+    <button class="ghost" data-act="sosslip">J'ai fumé</button>`}`;
   if(m==="game") startGame();
+  if(m==="surf") SOS.surf0=performance.now();
+  if(m==="coach") renderCoach();
   SOS.ph=-1; SOS.enc=-1;
   SOS.raf=requestAnimationFrame(sosLoop);
 }
@@ -787,6 +791,14 @@ function sosLoop(t){
   const el=(t-SOS.start)/1000, rem=Math.max(0,180-el);
   set("sr", rem>0? Math.floor(rem/60)+":"+String(Math.floor(rem%60)).padStart(2,"0") : "0:00");
   if(!SOS.done && rem<=0){ SOS.done=true; set("sok","L'envie est passée"); buzz([30,60,30]); }
+  const C=SOS.coach;
+  if(C && C.timerEnd){
+    const left=Math.max(0,C.timerEnd-Date.now());
+    set("ctime", Math.floor(left/60000)+":"+String(Math.floor(left/1000)%60).padStart(2,"0"));
+    const bar=document.getElementById("cbar"); if(bar) bar.style.width=(100-left/(C.timerLen*10))+"%";
+    if(left<=0){ const f=C.onTimer; C.timerEnd=null; C.onTimer=null; C.choices=null; buzz([20,40,20]);
+      if(SOS.mode!=="coach"){ SOS.mode="coach"; renderSOS(); } if(f) f(); }
+  }
   if(SOS.mode==="breath"){
     const cyc=14; let x=el%cyc, i=0; while(x>=PHASES[i][1]){ x-=PHASES[i][1]; i++; }
     if(i!==SOS.ph){ SOS.ph=i; const f=document.getElementById("bf");
@@ -797,6 +809,7 @@ function sosLoop(t){
     if(ei!==SOS.enc){ SOS.enc=ei; const L=sosLines(), e=document.getElementById("enc");
       if(e){ e.style.opacity=0; setTimeout(()=>{ e.textContent=L[ei%L.length]; e.style.opacity=1; },300); } }
   }else if(SOS.mode==="surf"){
+    const el=(t-(SOS.surf0||SOS.start))/1000;
     const k=Math.min(SURF.length-1,Math.floor(el/9));
     if(k!==SOS.enc){ SOS.enc=k; const e=document.getElementById("surf"); if(e){ e.style.opacity=0; setTimeout(()=>{ e.textContent=SURF[k]; e.style.opacity=1; },350); } }
     const amp = 34*Math.sin(Math.min(1,el/80)*Math.PI)+4;   // la vague monte puis redescend
@@ -813,6 +826,9 @@ function sosResultHTML(){
       <div class="h1" style="color:#fff">${e.ok?"Envie battue.":"Ce n'est pas un échec."}</div>
       <p style="margin:10px 0 0;font-size:17px;max-width:380px;opacity:.95">${e.ok?`${n} ${plural(n,"envie vaincue","envies vaincues")} depuis l'arrêt. Ton cerveau apprend à chaque fois.`
         :"Un faux pas n'efface pas ce que ton corps a déjà réparé. Repère ce qui a déclenché l'envie, et on repart."}</p>
+      ${e.intensity&&e.after!=null?`<p class="display" style="margin:14px 0 0;font-size:20px;font-weight:650">Intensité ${e.intensity} → ${e.after}</p>`:""}
+      ${!e.ok&&e.trigger&&TRIGGER_COACH[e.trigger]?`<div class="tipcard" style="margin-top:20px"><div class="small" style="font-weight:650;opacity:.85">La prochaine fois (${(TRIGGER_LABEL[e.trigger]||"").toLowerCase()})</div><p style="margin:6px 0 0">${TRIGGER_COACH[e.trigger].act}</p></div>`:""}
+      ${heavyCravings()?`<div class="tipcard" style="margin-top:14px"><p style="margin:0">Tes envies sont souvent fortes ces derniers jours. Ce n'est pas un manque de volonté : un tabacologue (39 89, gratuit) ou ton médecin peuvent t'aider avec des substituts bien dosés.</p></div>`:""}
       <div style="width:100%;max-width:420px;text-align:left;margin-top:26px">
         <div class="small" style="font-weight:600;margin-bottom:8px;opacity:.9">Intensité de l'envie</div>
         <div class="scale">${[1,2,3,4,5].map(i=>`<button style="${e.intensity===i?"background:#fff;color:#16222B":"background:rgba(255,255,255,.18);color:#fff"}" data-act="sint" data-v="${i}">${i}</button>`).join("")}</div>
@@ -825,9 +841,11 @@ function sosResultHTML(){
 function sosResult(ok){
   const at=Date.now(), secs=Math.round((performance.now()-SOS.start)/1000);
   const entry={id:uid(), at, type:"envie", ok, sos:secs};
+  const cd=SOS.coach&&SOS.coach.d;
+  if(cd){ if(cd.intensity) entry.intensity=cd.intensity; if(cd.after!=null) entry.after=cd.after; if(cd.trigger) entry.trigger=cd.trigger; if(cd.thought) entry.thought=cd.thought; if(cd.intensity) entry.coach=true; }
   S.log.push(entry);
-  if(!ok) S.log.push({id:uid(), at, type:"cigarette", n:1, link:entry.id});
-  save(); SOS.entry=entry; cancelAnimationFrame(SOS.raf); if(SOS.game) stopGame();
+  if(!ok) S.log.push({id:uid(), at, type:"cigarette", n:1, link:entry.id, trigger:entry.trigger});
+  save(); SOS.entry=entry; if(SOS.coach){ SOS.coach.dead=true; } cancelAnimationFrame(SOS.raf); if(SOS.game) stopGame();
   buzz(ok?[30,50,30]:60); renderSOS();
 }
 function updateSOSEntry(k,v){
@@ -836,6 +854,150 @@ function updateSOSEntry(k,v){
   if(k==="trigger"){ const c=S.log.find(x=>x.link===e.id); if(c) c.trigger=e.trigger; }
   save(); renderSOS();
 }
+/* ---------- Coach ---------- */
+function newCoach(){ return {msgs:[], choices:null, typing:false, d:{}, round:1, timerEnd:null, timerLen:0, onTimer:null, q:Promise.resolve(), dead:false}; }
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const REDUCED=()=>matchMedia("(prefers-reduced-motion: reduce)").matches;
+function fill(t){
+  const s=stats(), w=W(), n=resistedCount();
+  return t.replace(/\{dur\}/g,dur(s.el)).replace(/\{money\}/g,eur(s.money,true)).replace(/\{years\}/g,S.profile.years)
+    .replace(/\{resisted\}/g,`${n} ${plural(n,"envie","envies")}`).replace(/\{one\}/g,w.one).replace(/\{many\}/g,w.many);
+}
+function alive(C){ return SOS && SOS.coach===C && !C.dead; }
+function cSay(lines){
+  const C=SOS.coach; lines=[].concat(lines);
+  C.q=C.q.then(async()=>{
+    for(const l of lines){
+      if(!alive(C)) return;
+      C.typing=true; renderCoach();
+      await sleep(REDUCED()?120:Math.min(1500,420+l.length*13));
+      if(!alive(C)) return;
+      C.typing=false; C.msgs.push({who:"c",t:l}); renderCoach();
+    }
+  });
+}
+function cAsk(choices){ const C=SOS.coach; C.q=C.q.then(()=>{ if(alive(C)){ C.choices=choices; renderCoach(); } }); }
+function cThen(fn){ const C=SOS.coach; C.q=C.q.then(()=>{ if(alive(C)) fn(); }); }
+function cPick(i){
+  const C=SOS&&SOS.coach, ch=C&&C.choices&&C.choices[i]; if(!ch) return;
+  C.choices=null; C.msgs.push({who:"u",t:ch.label}); renderCoach(); buzz(8); ch.fn();
+}
+function renderCoach(){
+  if(!SOS||SOS.mode!=="coach") return;
+  const C=SOS.coach, chat=document.getElementById("cchat"), ch=document.getElementById("cchoices"); if(!chat) return;
+  chat.innerHTML=`<div class="sysline">Coach guidé, inspiré des méthodes des tabacologues. Pour parler à un vrai spécialiste : <a href="tel:3989">39 89</a>.</div>`+
+    C.msgs.map(m=> m.who==="t"
+      ? `<div class="bub c timer"><div class="row" style="gap:10px"><span>${m.done?"Deux minutes passées":"Je reste avec toi"}</span><span class="grow"></span><b class="tnum" ${m.done?"":'id="ctime"'}>${m.done?"✓":"2:00"}</b></div>${m.done?"":`<div class="tbar"><i id="cbar"></i></div>`}</div>`
+      : `<div class="bub ${m.who}">${esc(m.t)}</div>`).join("")+
+    (C.typing?`<div class="bub c typing" aria-label="Le coach écrit"><i></i><i></i><i></i></div>`:"");
+  ch.innerHTML=(C.choices||[]).map((c,i)=>`<button data-act="cpick" data-i="${i}">${esc(c.label)}</button>`).join("");
+  chat.scrollTop=chat.scrollHeight;
+}
+function topTrigger(){
+  const tr={}; cravings().filter(e=>e.trigger).forEach(e=>tr[e.trigger]=(tr[e.trigger]||0)+1);
+  const t=Object.entries(tr).sort((a,b)=>b[1]-a[1])[0]; return t&&t[1]>=2?t[0]:null;
+}
+function inPeakHour(){
+  const h=Array.from({length:24},(_,i)=>({i,n:0})); cravings().forEach(e=>h[new Date(e.at).getHours()].n++);
+  const p=peakWindow(h), now=new Date().getHours(); return p&&p.n>=4&&now>=p.a&&now<p.b;
+}
+function heavyCravings(){
+  const r=cravings().filter(e=>e.at>Date.now()-7*DAY), ints=r.filter(e=>e.intensity).map(e=>e.intensity);
+  return r.length>=10 && ints.length>=5 && ints.reduce((a,b)=>a+b,0)/ints.length>=3.5;
+}
+const intensityChoices=fn=>[1,2,3,4,5].map(i=>({label:`${i}, ${INTENSITY_LABEL[i].toLowerCase()}`, fn:()=>fn(i)}));
+
+function cStart(){
+  const name=(S.profile.firstName||"").trim();
+  cSay([`Je suis là${name?", "+name:""}.`,
+    "Une envie, c'est une vague : elle monte, atteint un pic, puis redescend. Souvent en quelques minutes. On la traverse ensemble, étape par étape.",
+    "Là, tout de suite, elle est forte comment, sur 5 ?"]);
+  cAsk(intensityChoices(cIntensity));
+}
+function cIntensity(i){
+  const C=SOS.coach; C.d.intensity=i;
+  cSay(i>=4?`D'accord, ${INTENSITY_LABEL[i].toLowerCase()}. C'est exactement le moment où ça se joue, et tu as tout ce qu'il faut pour la passer.`
+     : i===3?"Forte, mais tu es plus fort qu'elle. On s'en occupe."
+     : "Ok. Une envie comme ça se gère bien. On la prend quand même au sérieux.");
+  const top=topTrigger();
+  cSay(["Qu'est-ce qui se passe autour de toi, là ?"].concat(top?[`D'après ton journal, chez toi c'est souvent : ${(TRIGGER_LABEL[top]||"").toLowerCase()}.`]:[]));
+  const list=top?[[top,TRIGGER_LABEL[top]]].concat(TRIGGERS.filter(t=>t[0]!==top)):TRIGGERS;
+  cAsk(list.map(([k,l])=>({label:k==="autre"?"Je ne sais pas":l, fn:()=>cTrigger(k)})));
+}
+function cTrigger(k){
+  const C=SOS.coach; C.d.trigger=k; const tc=TRIGGER_COACH[k]||TRIGGER_COACH.autre;
+  cSay([tc.why].concat(inPeakHour()?["Et c'est aussi ton heure à risque d'après tes stats. Normal que ce soit plus dur maintenant."]:[]));
+  cSay("Et dans ta tête, là, ça dit quoi ?");
+  cAsk(THOUGHTS.map(([k2,l])=>({label:l, fn:()=>cThought(k2)})));
+}
+function cThought(k){
+  const C=SOS.coach; C.d.thought=k; const t=THOUGHTS.find(x=>x[0]===k);
+  cSay(t[2].map(fill));
+  const rs=S.profile.reasons||[];
+  if(rs.length){
+    const r=rs[Math.floor(Math.random()*rs.length)];
+    cSay([`Tu m'as dit pourquoi tu arrêtes : « ${r} »`,"C'est toujours vrai ?"]);
+    cAsk(["Oui","Plus que jamais","Je ne sais plus"].map(l=>({label:l, fn:()=>cReason(l)})));
+  }else cThen(cFacts);
+}
+function cReason(ans){
+  if(ans==="Je ne sais plus") cSay(["C'est normal d'en douter pendant une envie : c'est l'envie qui parle, pas toi.","On ne prend aucune décision pendant une envie. Dans dix minutes, tu retrouveras pourquoi tu fais ça."]);
+  else cSay(ans==="Plus que jamais"?"Alors accroche-toi à ça. C'est plus fort que n'importe quelle envie.":"Alors garde-la en tête. C'est elle qui compte, pas l'envie.");
+  cThen(cFacts);
+}
+function cFacts(){
+  const s=stats(), w=W(), lines=[];
+  if(!s.before) lines.push(`Depuis l'arrêt : ${dur(s.el)} sans fumer, ${eur(s.money,true)} gardés, ${int(s.avoided)} ${w.many} pas fumées.`);
+  const b=S.health.baseline, keys=Object.keys(S.health.entries).sort();
+  if(b&&keys.length>1){ const l=S.health.entries[keys[keys.length-1]]; if(b.rhr!=null&&l.rhr!=null&&l.rhr<b.rhr-.5) lines.push(`Et ta montre le voit : ton pouls au repos a baissé de ${dec(b.rhr-l.rhr,0)} bpm.`); }
+  if(lines.length) cSay(lines);
+  cThen(cAction);
+}
+function cAction(){
+  const C=SOS.coach, tc=TRIGGER_COACH[C.d.trigger]||TRIGGER_COACH.autre;
+  cSay(["On laisse passer deux minutes. Pendant ce temps :", tc.act]);
+  cAsk([{label:"C'est parti", fn:()=>cTimer(120)},{label:"Respirer avec le guide", fn:()=>{ cTimer(120); SOS.mode="breath"; renderSOS(); }}]);
+}
+function cTimer(sec){
+  const C=SOS.coach;
+  C.msgs.push({who:"t"}); C.timerLen=sec; C.timerEnd=Date.now()+sec*1000;
+  C.onTimer=()=>{ C.msgs.forEach(m=>{ if(m.who==="t") m.done=true; }); renderCoach(); cRecheck(); };
+  C.choices=[{label:"Ça va déjà mieux", fn:()=>{ const f=C.onTimer; C.timerEnd=null; C.onTimer=null; if(f) f(); }}];
+  renderCoach();
+}
+function cRecheck(){
+  cSay("Et maintenant, elle est à combien ?");
+  cAsk(intensityChoices(cAfter));
+}
+function cAfter(i2){
+  const C=SOS.coach, i=C.d.intensity; C.d.after=i2;
+  if(i2<i || i2<=1){
+    cSay([i2<i?`Elle est passée de ${i} à ${i2}. Tu viens de prouver que tu peux la faire redescendre sans fumer.`:"Elle est au plus bas. Bien joué.",
+      "Chaque envie traversée comme ça affaiblit la suivante. C'est comme ça que ton cerveau se libère de la nicotine."]);
+    cAsk([{label:"C'est passé, je n'ai pas fumé", fn:()=>sosResult(true)}]);
+  }else if(C.round===1){
+    C.round=2;
+    cSay([i2>i?"Elle est montée. Ça arrive, surtout dans les premiers jours, et ça ne veut pas dire que tu vas craquer.":"Elle tient bon. Ça arrive, et ça ne veut pas dire que tu vas craquer.",
+      "On change d'outil. Lequel te parle le plus ?"]);
+    cAsk(SECOND_TOOLS.map(([k,l])=>({label:l, fn:()=>cTool(k)})));
+  }else{
+    const mins=Math.max(1,Math.round((performance.now()-SOS.start)/60000));
+    cSay([`Tu tiens depuis ${mins} minute${mins>1?"s":""}. C'est déjà une victoire.`,
+      "Si les envies restent aussi fortes, ce n'est pas un manque de volonté : c'est ton corps qui a besoin d'aide. Un tabacologue (39 89, gratuit) ou ton médecin peuvent t'aider à ajuster des substituts. Ça change vraiment la donne."]);
+    cAsk([{label:"Appeler le 39 89", fn:()=>{ location.href="tel:3989"; cAsk([{label:"J'ai tenu", fn:()=>sosResult(true)},{label:"J'ai fumé", fn:()=>sosResult(false)}]); }},
+      {label:"Je tiens, ça passe", fn:()=>sosResult(true)},{label:"J'ai fumé", fn:()=>sosResult(false)}]);
+  }
+}
+function cTool(k){
+  const t=SECOND_TOOLS.find(x=>x[0]===k);
+  cSay(t[2]);
+  cThen(()=>{
+    if(k==="surf"){ cTimer(120); SOS.mode="surf"; renderSOS(); }
+    else if(k==="game"){ cTimer(90); SOS.mode="game"; renderSOS(); }
+    else cTimer(120);
+  });
+}
+
 function closeSOS(){ if(SOS){ cancelAnimationFrame(SOS.raf); if(SOS.game) stopGame(); } SOS=null; const el=document.getElementById("sos"); if(el) el.remove(); render(true); }
 
 /* Mini-jeu : dissipe la fumée */
@@ -980,6 +1142,7 @@ document.addEventListener("click",e=>{
     case "sosok": sosResult(true); break;
     case "sosslip": sosResult(false); break;
     case "sosmode": SOS.mode=v; renderSOS(); break;
+    case "cpick": cPick(+b.dataset.i); break;
     case "sostip": SOS.tip++; renderSOS(); break;
     case "sint": updateSOSEntry("intensity",+v); break;
     case "strig": updateSOSEntry("trigger",v); break;

@@ -141,3 +141,59 @@ const ICON = {
 function icon(name, size=22, extra=""){
   return `<svg class="ico" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${ICON[name]||""}</svg>`;
 }
+
+/* ============================================================
+   Coach anti-envie — approche des tabacologues :
+   évaluer, identifier le déclencheur, recadrer la pensée (TCC),
+   raviver la motivation (entretien motivationnel), agir, réévaluer.
+   ============================================================ */
+const INTENSITY_LABEL = {1:"Légère",2:"Moyenne",3:"Forte",4:"Très forte",5:"Insupportable"};
+
+/* Pour chaque déclencheur : ce qui se passe, et l'action pendant le minuteur. */
+const TRIGGER_COACH = {
+  cafe:{why:"Café et cigarette sont devenus un duo dans ton cerveau : l'un appelle l'autre. On casse l'association.", act:"Change de place, garde l'autre main occupée, et bois ton café plus vite que d'habitude."},
+  stress:{why:"Le stress pousse vers la cigarette parce qu'elle calmait le manque de nicotine, pas le stress lui-même. On calme ton corps directement.", act:"Épaules relâchées, inspire 4 secondes, bloque 4, expire 6. Recommence jusqu'à la fin du minuteur."},
+  repas:{why:"Après manger, c'est un des moments les plus automatiques. Le geste arrive avant la réflexion.", act:"Lève-toi de table. Brosse-toi les dents ou prends un chewing-gum à la menthe : le goût frais coupe l'envie."},
+  alcool:{why:"L'alcool baisse la vigilance : c'est là qu'arrivent beaucoup de faux pas. Ce n'est pas un manque de volonté, c'est chimique.", act:"Pose ton verre quelques minutes, prends un verre d'eau, et éloigne-toi des fumeurs."},
+  ennui:{why:"L'ennui laisse toute la place à l'envie. Il te faut quelque chose de court et prenant.", act:"Marche, envoie un message à quelqu'un, range un truc. N'importe quoi qui occupe tes mains et ta tête."},
+  pause:{why:"La pause cigarette, c'était ton moment à toi. Tu as le droit de garder la pause : on change juste ce qu'il y a dedans.", act:"Sors prendre l'air sans cigarette. Marche jusqu'au coin de la rue et reviens."},
+  social:{why:"Avec des fumeurs, l'envie vient par imitation. Ton cerveau voit le geste et le réclame.", act:"Mets-toi un peu à l'écart pendant qu'ils fument, occupe tes mains. « J'ai arrêté » suffit, pas besoin de te justifier."},
+  voiture:{why:"En voiture, mains et bouche sont libres et le trajet est long : terrain idéal pour l'automatisme.", act:"Mets une musique que tu aimes fort, mâche un chewing-gum, ouvre la fenêtre."},
+  reveil:{why:"L'envie du réveil vient de la nuit sans nicotine. Elle est forte mais courte.", act:"Grand verre d'eau froide, puis douche ou petit-déjeuner. Change l'ordre de ton matin."},
+  telephone:{why:"Téléphone et cigarette, c'est un geste couplé : une main tient, l'autre cherche.", act:"Passe le téléphone dans l'autre main, ou marche pendant l'appel."},
+  fatigue:{why:"Fatigué, on a moins de ressources pour résister. Ce n'est pas le moment de décider quoi que ce soit.", act:"Eau froide sur le visage et les poignets, puis quelques respirations lentes."},
+  colere:{why:"La colère cherche une sortie. La cigarette ne règle rien à la situation, elle la met juste en pause cinq minutes.", act:"Marche vite, serre quelque chose fort, ou écris ce qui t'énerve."},
+  autre:{why:"Pas besoin de savoir d'où elle vient pour la laisser passer. On s'occupe de ton corps d'abord.", act:"Un grand verre d'eau froide, à petites gorgées, et respire lentement."},
+};
+
+/* Pensées automatiques et recadrage (thérapie cognitive). {days} {money} {resisted} {years} {one} {many} remplacés. */
+const THOUGHTS = [
+  ["juste1","« Juste une, ça ne compte pas »",[
+    "C'est la pensée la plus piégeuse, et ton cerveau la connaît par cœur.",
+    "Pour lui, il n'y a pas « une » {one} : il y a la première d'une nouvelle série. Une seule suffit à relancer le manque pour plusieurs jours.",
+    "Tu ne refuses pas une {one}. Tu protèges {dur} sans tabac."]],
+  ["calme","« J'en ai besoin pour me calmer »",[
+    "Je comprends. Mais la cigarette calmait surtout le manque qu'elle créait elle-même.",
+    "Les études le montrent : une fois le sevrage passé, le stress et l'anxiété baissent en moyenne chez les ex-fumeurs.",
+    "Ton corps sait se calmer sans elle. On va le prouver dans deux minutes."]],
+  ["echec","« Je ne vais pas y arriver »",[
+    "Regarde les faits : {dur} sans fumer et {resisted} déjà vaincues. Tu y arrives, là, maintenant.",
+    "Tu n'as pas à tenir pour toujours. Juste les cinq prochaines minutes."]],
+  ["manque","« Ça me manque, tout simplement »",[
+    "C'est normal : {years} ans d'habitude, ça laisse une trace.",
+    "Ce qui te manque, c'est surtout le rituel, la pause, le geste. Pas la fumée. On peut garder le rituel et retirer la {one}."]],
+  ["plaisir","« Je mérite un petit plaisir »",[
+    "Tu as raison de vouloir te faire du bien. Tu le mérites vraiment.",
+    "Tu as déjà gardé {money}. Offre-toi un vrai plaisir avec : celui-là ne te coûtera rien en santé."]],
+  ["rien","Rien de précis",[
+    "D'accord. Parfois c'est juste le corps qui réclame, sans raison.",
+    "Pas besoin de discuter avec l'envie. On la regarde passer."]],
+];
+
+/* Deuxième outil quand l'envie résiste. */
+const SECOND_TOOLS = [
+  ["surf","Surfer l'envie","On change d'approche : au lieu de lutter, on observe. Je te guide."],
+  ["game","Jouer une minute","On occupe ton cerveau à fond. Touche les nuages, je reste là."],
+  ["subst","Prendre un substitut","Si tu as une gomme, une pastille ou un spray, c'est le moment : ils agissent en quelques minutes. Prends-le, puis on refait le point."],
+  ["call","Appeler quelqu'un","Appelle ou écris à quelqu'un, même pour parler d'autre chose. Deux minutes de conversation suffisent souvent à faire passer le pic."],
+];
