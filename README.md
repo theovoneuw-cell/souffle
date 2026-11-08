@@ -4,7 +4,7 @@ L'appli de Théo pour arrêter de fumer. Faite pour une seule personne.
 
 **→ https://theovoneuw-cell.github.io/souffle/**
 
-Web app autonome (un seul `index.html`), sans compte ni serveur : tout est stocké dans Safari, sur le téléphone. Le code est public, les données ne le sont jamais.
+Web app autonome (HTML, CSS et JavaScript, sans dépendance), sans compte ni serveur : tout est stocké dans Safari, sur le téléphone. Le code est public, les données ne le sont jamais.
 
 ## Ce qu'elle fait
 
