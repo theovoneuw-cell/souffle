@@ -58,7 +58,7 @@ function applyTheme(){
   if(t==="auto") document.documentElement.removeAttribute("data-theme");
   else document.documentElement.setAttribute("data-theme",t);
   const dark = t==="dark" || (t==="auto" && matchMedia("(prefers-color-scheme: dark)").matches);
-  document.querySelector('meta[name="theme-color"]').setAttribute("content", dark?"#0B1218":"#E7EDF1");
+  document.querySelector('meta[name="theme-color"]').setAttribute("content", dark?"#0E1318":"#F1F3F2");
   return dark;
 }
 let DARK = applyTheme();
@@ -291,11 +291,19 @@ const set=(id,txt)=>{ const el=document.getElementById(id); if(el && el.textCont
 function mix(a,b,t){ return a.map((v,i)=>Math.round(v+(b[i]-v)*t)); }
 const rgb=a=>`rgb(${a.join(",")})`;
 function skyVars(c){
-  const L={top:[[98,106,112],[30,104,196]], mid:[[124,132,137],[62,142,220]], low:[[150,157,161],[112,178,234]]};
-  const D={top:[[22,25,29],[5,18,40]], mid:[[36,40,44],[12,38,74]], low:[[50,54,58],[26,62,106]]};
+  /* Les couleurs du logo : fumée gris ardoise -> ciel bleu, adoucies.
+     Le soir le bas du ciel se réchauffe, le matin il se dore : le ciel suit la journée. */
+  const L={top:[[100,108,114],[60,108,166]], mid:[[124,131,136],[106,150,196]], low:[[150,156,160],[182,204,222]]};
+  const D={top:[[22,26,30],[8,20,36]], mid:[[34,39,44],[16,40,66]], low:[[48,53,58],[34,62,94]]};
   const P=DARK?D:L, e=Math.pow(c,.8);
-  return {top:rgb(mix(P.top[0],P.top[1],e)), mid:rgb(mix(P.mid[0],P.mid[1],e)), low:rgb(mix(P.low[0],P.low[1],e)),
-          sun:Math.max(0,(c-.22)/.78)*(DARK?.35:1), smoke:.9*Math.pow(1-c,1.3)};
+  let top=mix(P.top[0],P.top[1],e), mid=mix(P.mid[0],P.mid[1],e), low=mix(P.low[0],P.low[1],e);
+  const h=new Date().getHours()+new Date().getMinutes()/60;
+  const bell=(x,a,b)=>x<=a||x>=b?0:Math.sin(Math.PI*(x-a)/(b-a));
+  const eve=bell(h,16.5,22)*.55, morn=bell(h,5.5,10.5)*.4;
+  const warm=DARK?[78,60,72]:[228,194,172], gold=DARK?[60,58,50]:[234,214,178], dusk=DARK?[30,34,58]:[138,148,186];
+  low=mix(mix(low,warm,eve),gold,morn); mid=mix(mid,dusk,eve*.6);
+  return {top:rgb(top), mid:rgb(mid), low:rgb(low),
+          sun:Math.max(0,(c-.22)/.78)*(DARK?.3:.85), smoke:.85*Math.pow(1-c,1.3)};
 }
 function paintSky(el, c){
   if(!el) return; const v=skyVars(c);
