@@ -50,12 +50,12 @@ function columns({data, height=150, colors=["var(--air)","var(--ember)"], highli
     const ha=base-y(a), hb=base-y(b);
     const ca = highlight && !highlight(d,i) ? "var(--hair)" : colors[0];
     if(b>0 && a>0){
-      g+=`<rect x="${x}" y="${base-ha}" width="${bw}" height="${ha}" fill="${ca}"/>`;
-      g+=`<path d="${topRounded(x,base-ha-hb,bw,Math.max(0,hb-2),Math.min(4,bw/2))}" fill="${colors[1]}"/>`;
+      g+=`<g class="mk" style="--d:${i}"><rect x="${x}" y="${base-ha}" width="${bw}" height="${ha}" fill="${ca}"/>`;
+      g+=`<path d="${topRounded(x,base-ha-hb,bw,Math.max(0,hb-2),Math.min(4,bw/2))}" fill="${colors[1]}"/></g>`;
     }else if(a>0){
-      g+=`<path d="${topRounded(x,base-ha,bw,ha,Math.min(4,bw/2))}" fill="${ca}"/>`;
+      g+=`<path class="mk" style="--d:${i}" d="${topRounded(x,base-ha,bw,ha,Math.min(4,bw/2))}" fill="${ca}"/>`;
     }else if(b>0){
-      g+=`<path d="${topRounded(x,base-hb,bw,hb,Math.min(4,bw/2))}" fill="${colors[1]}"/>`;
+      g+=`<path class="mk" style="--d:${i}" d="${topRounded(x,base-hb,bw,hb,Math.min(4,bw/2))}" fill="${colors[1]}"/>`;
     }
     if(d.axis!=null || i%labelEvery===0) g+=`<text class="axis" x="${cx}" y="${H-6}" text-anchor="middle">${d.axis!=null?d.axis:d.label}</text>`;
     pts.push({x:cx, y:y(a+b), tip:d.tip});
@@ -74,7 +74,7 @@ function hbars({data, color="var(--air)", fmt=v=>v}){
   data.forEach((d,i)=>{
     const yy=i*row+7, h=20, w=(VW-LW-R)*d.v/max;
     g+=`<text x="0" y="${yy+14.5}" font-size="13.5" fill="var(--ink2)" font-family="var(--text)">${d.label}</text>`;
-    g+=`<path d="${rightRounded(LW,yy,Math.max(2,w),h,4)}" fill="${color}"/>`;
+    g+=`<path class="mkh" style="--d:${i}" d="${rightRounded(LW,yy,Math.max(2,w),h,4)}" fill="${color}"/>`;
     g+=`<text x="${LW+Math.max(2,w)+8}" y="${yy+14.5}" font-size="13" font-weight="600" fill="var(--ink)" font-family="var(--text)">${fmt(d.v)}</text>`;
     pts.push({x:LW+w/2, y:yy, tip:d.tip, row:i});
   });
@@ -108,8 +108,8 @@ function line({points, height=160, color="var(--air)", ref=null, refLabel="", pr
   const P=points.map(p=>[x(p.t),y(p.v)]);
   if(P.length>1){
     const d=P.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+","+p[1].toFixed(1)).join("");
-    g+=`<path d="${d}L${P[P.length-1][0]},${y(zero?0:mn)}L${P[0][0]},${y(zero?0:mn)}Z" fill="${color}" opacity=".10"/>`;
-    g+=`<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    g+=`<path class="area" d="${d}L${P[P.length-1][0]},${y(zero?0:mn)}L${P[0][0]},${y(zero?0:mn)}Z" fill="${color}" opacity=".12"/>`;
+    g+=`<path class="ln" pathLength="1" d="${d}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
   }
   if(proj && proj.length){
     const last=P[P.length-1], Q=[last].concat(proj.map(p=>[x(p.t),y(p.v)]));

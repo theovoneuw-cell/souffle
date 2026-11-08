@@ -238,25 +238,30 @@ function render(keepScroll){
   html+=tabsBar(t);
   $app.innerHTML=html;
   bindCharts($app);
-  if(t==="today"){ tick(); timer=setInterval(tick,1000); checkUnlocks(); }
+  if(!keepScroll){ const v=$app.querySelector(".page"); if(v) v.classList.add("view-in"); }
+  if(t==="today"){ HERO_ENTER=!keepScroll; tick(); timer=setInterval(tick,1000); checkUnlocks(); }
   if(!keepScroll) window.scrollTo(0,0);
 }
 function tabsBar(t){
   const tabs=[["today","Aujourd'hui","today"],["stats","Stats","stats"],["prog","Progrès","trophy"],["health","Santé","watch"],["me","Toi","user"]];
-  return `<nav class="tabs" aria-label="Navigation"><div class="in">${tabs.map(([k,l,i])=>`<button class="tab ${t===k?"on":""}" data-tab="${k}" aria-current="${t===k?"page":"false"}">${icon(i,24)}<span>${l}</span></button>`).join("")}</div></nav>`;
+  const ti=Math.max(0,tabs.findIndex(x=>x[0]===t));
+  return `<nav class="tabs" aria-label="Navigation"><div class="in" style="--ti:${ti}"><span class="pill" aria-hidden="true"></span>${tabs.map(([k,l,i])=>`<button class="tab ${t===k?"on":""}" data-tab="${k}" aria-current="${t===k?"page":"false"}">${icon(i,24)}<span>${l}</span></button>`).join("")}</div></nav>`;
 }
-function ringSVG(prog){
+function ringSVG(prog, onGlass){
   const r=24, c=2*Math.PI*r, off=c*(1-Math.max(.003,Math.min(1,prog)));
-  return `<svg viewBox="0 0 56 56"><circle cx="28" cy="28" r="${r}" fill="none" stroke="var(--paper2)" stroke-width="6"/><circle cx="28" cy="28" r="${r}" fill="none" stroke="var(--air)" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>`;
+  const bg=onGlass?"rgba(255,255,255,.25)":"var(--fill)", fg=onGlass?"#fff":"var(--air)";
+  return `<svg viewBox="0 0 56 56"><circle cx="28" cy="28" r="${r}" fill="none" stroke="${bg}" stroke-width="6"/><circle class="pg" cx="28" cy="28" r="${r}" fill="none" stroke="${fg}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>`;
 }
+let HERO_ENTER=false;
+const REDUCED=()=>matchMedia("(prefers-reduced-motion: reduce)").matches;
 const set=(id,txt)=>{ const el=document.getElementById(id); if(el && el.textContent!==txt) el.textContent=txt; };
 
 /* ---------- Ciel ---------- */
 function mix(a,b,t){ return a.map((v,i)=>Math.round(v+(b[i]-v)*t)); }
 const rgb=a=>`rgb(${a.join(",")})`;
 function skyVars(c){
-  const L={top:[[140,149,155],[63,136,207]], mid:[[178,185,189],[128,186,234]], low:[[212,216,218],[214,233,246]]};
-  const D={top:[[36,42,47],[12,40,68]], mid:[[54,60,64],[24,70,108]], low:[[70,76,80],[40,96,136]]};
+  const L={top:[[98,106,112],[30,104,196]], mid:[[124,132,137],[62,142,220]], low:[[150,157,161],[112,178,234]]};
+  const D={top:[[22,25,29],[5,18,40]], mid:[[36,40,44],[12,38,74]], low:[[50,54,58],[26,62,106]]};
   const P=DARK?D:L, e=Math.pow(c,.8);
   return {top:rgb(mix(P.top[0],P.top[1],e)), mid:rgb(mix(P.mid[0],P.mid[1],e)), low:rgb(mix(P.low[0],P.low[1],e)),
           sun:Math.max(0,(c-.22)/.78)*(DARK?.35:1), smoke:.9*Math.pow(1-c,1.3)};
@@ -268,53 +273,47 @@ function paintSky(el, c){
 }
 const SMOKE='<div class="sun"></div><div class="smoke s1"></div><div class="smoke s2"></div><div class="smoke s3"></div><div class="smoke s4"></div>';
 
-/* ---------- Aujourd'hui ---------- */
+/* ---------- Aujourd'hui (esprit Météo) ---------- */
 function viewToday(){
-  const p=S.profile, s=stats();
+  const p=S.profile, s=stats(), w=W();
   const day=Math.floor(s.days)+1;
   const mission = !s.before && day<=30 ? MISSIONS[day-1] : null;
   const rs=p.reasons||[];
   const bs=badgeState(), got=bs.filter(b=>b.got).sort((a,b)=>b.at-a.at);
   const rw=rewardsProgress(s.money);
-  const tease=healthTeaser();
+  const res=resistedCount(), env=cravings().length;
+  let i=0; const I=()=>`style="--i:${i++}"`;
+  const go=(label)=>`<span class="go">${label}${icon("chevron",13)}</span>`;
   return `
-  <header class="sky" id="sky">${SMOKE}
-    <div class="content" id="hero"></div>
-  </header>
-  <main class="sheet">
-    <section class="block" aria-label="Ce que tu as gagné">
-      <div class="row"><div class="grow"><div class="meta">Économisé</div><div class="gain-money" id="t-money"></div></div>
-        <div class="chip-ic sun">${icon("coin")}</div></div>
-      <div class="gain-sub">
-        <div><div class="meta">${W().Many} évitées</div><div class="v" id="t-cigs"></div></div>
-        <div><div class="meta">Vie regagnée (est.)</div><div class="v" id="t-life"></div></div>
+  <div class="skybg" id="sky">${SMOKE}</div>
+  <main class="today">
+    <header class="hero ${HERO_ENTER?"enter":""}" id="hero"></header>
+    <div class="stagger">
+      <section class="glass" ${I()} aria-label="Argent économisé">
+        <div class="gh">${icon("coin")} Économisé</div>
+        <div class="gbig tnum" id="t-money"></div>
+        <div class="gsub" style="padding-top:4px">${eur(s.perDayMoney)} de plus chaque jour, ${eur(s.yearly,true)} par an</div>
+      </section>
+      <div class="tiles" ${I()}>
+        <section class="glass"><div class="gh">${icon("nocig")} ${w.Many} évitées</div><div class="gmid tnum" id="t-cigs"></div><div class="gsub" id="t-packs"></div></section>
+        <section class="glass"><div class="gh">${icon("heart")} Vie regagnée</div><div class="gmid" id="t-life"></div><div class="gsub">estimation, ~${MIN_PER_CIG_LIFE} min par ${w.one}</div></section>
       </div>
-    </section>
-
-    ${mission?`<section class="section"><div class="st"><h2 class="h2">Mission du jour ${day}</h2><button class="linkbtn" data-goto="prog" data-prog="plan">Programme</button></div>
-      <div class="block"><div class="row" style="align-items:flex-start">
-        <button class="icon-btn" style="${S.missions[day]?"background:var(--air);color:#fff":"background:var(--paper);box-shadow:inset 0 0 0 2px var(--hair)"}" data-act="mission" data-day="${day}" aria-label="${S.missions[day]?"Mission faite":"Marquer comme faite"}">${S.missions[day]?icon("check",20):""}</button>
-        <div class="grow"><div class="h3">${esc(mission.title)}</div><p class="small ink2" style="margin:4px 0 0">${esc(mission.text)}</p></div>
-      </div></div></section>`:""}
-
-    <section class="section"><div class="st"><h2 class="h2">Ton corps</h2><button class="linkbtn" data-goto="prog" data-prog="body">Tout voir</button></div>
-      <div class="block" id="t-next"></div></section>
-
-    ${rs.length?`<section class="section"><div class="st"><h2 class="h2">Pourquoi tu fais ça</h2></div>
-      <div class="block flat"><p class="display" style="font-size:23px;line-height:1.25;font-weight:600;margin:0" id="t-reason"></p></div></section>`:""}
-
-    ${rw.length?`<section class="section"><div class="st"><h2 class="h2">Tes objectifs</h2><button class="linkbtn" data-goto="me">Modifier</button></div>
-      <div class="block rows">${rw.map((r,i)=>`<div>
-        <div class="row" style="margin-bottom:10px"><div class="grow"><div class="h3">${esc(r.name)}</div>
-          <div class="meta" id="t-rw-${i}">${rwLine(r,s)}</div></div><div class="tnum" style="font-weight:650" id="t-rwp-${i}">${Math.floor(r.prog*100)} %</div></div>
-        <div class="bar sun"><i id="t-rwb-${i}" style="width:${r.prog*100}%"></i></div></div>`).join("")}</div></section>`:""}
-
-    <section class="section"><div class="st"><h2 class="h2">Trophées</h2><button class="linkbtn" data-goto="prog" data-prog="badges">${got.length} sur ${bs.length}</button></div>
-      <div class="block"><div class="row" style="gap:10px;overflow:hidden">
-        ${got.slice(0,5).map(b=>`<div class="badge got ${b.kind}" style="box-shadow:none;padding:0;background:none;min-width:56px"><div class="medal" style="width:48px;height:48px">${icon(b.icon,20)}</div><div class="s" style="color:var(--ink2)">${esc(b.title)}</div></div>`).join("")||`<p class="small ink2" style="margin:0">Ton premier trophée arrive dans moins d'une heure.</p>`}
-      </div></div></section>
-
-    ${tease}
+      <button class="glass" ${I()} data-goto="prog" data-prog="body"><div class="gh">${icon("lungs")} Ton corps ${go("Tout voir")}</div><div id="t-next"></div></button>
+      ${mission?`<section class="glass" ${I()}><div class="gh">${icon("check")} Mission du jour ${day} <button class="go" data-goto="prog" data-prog="plan">Programme${icon("chevron",13)}</button></div>
+        <div class="row" style="align-items:flex-start"><div class="grow"><div class="h3">${esc(mission.title)}</div><div class="gtext" style="margin-top:4px">${esc(mission.text)}</div></div>
+        <button class="gcheck ${S.missions[day]?"on":""}" data-act="mission" data-day="${day}" aria-label="${S.missions[day]?"Mission faite":"Marquer comme faite"}">${S.missions[day]?icon("check",18):""}</button></div></section>`:""}
+      <div class="tiles" ${I()}>
+        <button class="glass" data-goto="stats"><div class="gh">${icon("flame")} Envies</div><div class="gmid tnum">${res}</div><div class="gsub">${env?`vaincues sur ${env}, soit ${Math.round(res/env*100)} %`:"vaincues. Le SOS est là quand il faut."}</div></button>
+        <button class="glass" data-goto="prog" data-prog="badges"><div class="gh">${icon("trophy")} Trophées</div><div class="gmid tnum">${got.length}<span style="font-size:18px;opacity:.7"> / ${bs.length}</span></div>
+          <div class="medals" style="margin-top:auto;padding-top:8px">${got.slice(0,4).map(b=>`<i>${icon(b.icon,16)}</i>`).join("")}</div></button>
+      </div>
+      ${rs.length?`<section class="glass" ${I()}><div class="gh">${icon("sparkle")} Pourquoi tu fais ça</div><p class="gquote" style="margin:0" id="t-reason"></p></section>`:""}
+      ${rw.length?`<section class="glass" ${I()}><div class="gh">${icon("gift")} Tes objectifs <button class="go" data-goto="me">Modifier${icon("chevron",13)}</button></div>
+        ${rw.map((r,k)=>`<div style="${k?"margin-top:14px":""}"><div class="row" style="margin-bottom:8px"><div class="grow"><div class="h3">${esc(r.name)}</div>
+          <div class="gtext" style="font-size:14px" id="t-rw-${k}">${rwLine(r,s)}</div></div><div class="tnum" style="font-weight:600" id="t-rwp-${k}">${Math.floor(r.prog*100)} %</div></div>
+          <div class="bar"><i id="t-rwb-${k}" style="width:${r.prog*100}%"></i></div></div>`).join("")}</section>`:""}
+      ${healthTeaser(I())}
+    </div>
   </main>
   <div class="dock"><div class="in">
     <button class="btn ember" data-act="sos">${icon("flame",20)} J'ai envie de fumer</button>
@@ -324,11 +323,17 @@ function viewToday(){
 function rwLine(r,s){
   if(r.missing<=0) return "C'est payé. Va te l'offrir.";
   if(r.got<=0 && r.prog===0 && s.perDayMoney>0){
-    const prev=(S.profile.rewards||[]).slice(0,(S.profile.rewards||[]).indexOf((S.profile.rewards||[]).find(x=>x.id===r.id)));
-    const before=prev.reduce((a,x)=>a+x.price,0)-s.money;
+    const list=S.profile.rewards||[], idx=list.findIndex(x=>x.id===r.id);
+    const before=list.slice(0,idx).reduce((a,x)=>a+x.price,0)-s.money;
     if(before>0) return `${eur(r.price,true)}, après l'objectif précédent`;
   }
   return s.perDayMoney>0 ? `${eur(r.missing,true)} restants, encore ${dur(r.missing/s.perDayMoney*DAY)}` : `${eur(r.missing,true)} restants`;
+}
+function countUp(el, to, ms=900){
+  if(!el) return; if(REDUCED()){ el.textContent=String(to); return; }
+  const t0=performance.now();
+  const step=t=>{ const k=Math.min(1,(t-t0)/ms), e=1-Math.pow(1-k,3); el.textContent=String(Math.round(to*e)); if(k<1) requestAnimationFrame(step); else el.dataset.done=1; };
+  requestAnimationFrame(step);
 }
 function tick(){
   const p=S.profile; if(!p) return;
@@ -337,29 +342,38 @@ function tick(){
   const c=s.before?0:clarity(s.el);
   paintSky(document.getElementById("sky"),c);
   if(s.before){
-    hero.innerHTML=`<div class="who">${name?esc(name)+", ta":"Ta"} dernière cigarette dans</div>
-      <div class="days" style="font-size:72px">${dur(s.quit-Date.now())}</div>
-      <div class="clock">Prépare-toi : jette les briquets, préviens tes proches.</div>`;
+    hero.innerHTML=`<div class="who">${name?esc(name)+", ta":"Ta"} dernière ${W().one} dans</div>
+      <div class="big" style="font-size:64px;margin-top:10px">${dur(s.quit-Date.now())}</div>
+      <div class="sub">Prépare-toi : jette les briquets, préviens tes proches.</div>`;
   }else{
     const d=Math.floor(s.days), n=reached(s.el);
     if(!hero.dataset.ready){
       hero.dataset.ready=1;
-      hero.innerHTML=`<div class="who">${name?esc(name)+", tu":"Tu"} ne fumes plus depuis</div>
-        <div class="days"><span id="t-days"></span><span class="u" id="t-du"></span></div>
-        <div class="clock" id="t-clock"></div>
-        <div class="clarity"><i><b id="t-cl" style="width:0"></b></i><span id="t-steps"></span></div>`;
+      hero.innerHTML=`<div class="who">${name?esc(name):"Sans fumer"}</div>
+        <div class="big tnum" id="t-days">0</div>
+        <div class="unit" id="t-du"></div>
+        <div class="sub" id="t-clock"></div>
+        <div class="steps" id="t-steps"></div>`;
+      if(HERO_ENTER) countUp(document.getElementById("t-days"),d); else { const e=document.getElementById("t-days"); e.textContent=String(d); e.dataset.done=1; }
     }
-    set("t-days",String(d)); set("t-du",plural(d,"jour","jours")); set("t-clock","et "+clock(s.el));
-    set("t-steps",`${n} ${plural(n,"étape franchie","étapes franchies")} sur ${MILESTONES.length}`);
-    const cl=document.getElementById("t-cl"); if(cl) cl.style.width=(c*100).toFixed(1)+"%";
+    const de=document.getElementById("t-days"); if(de&&de.dataset.done) set("t-days",String(d));
+    set("t-du",`${plural(d,"jour","jours")} sans fumer`);
+    set("t-clock",clock(s.el));
+    set("t-steps",`${n} ${plural(n,"étape","étapes")} du corps sur ${MILESTONES.length}`);
   }
   set("t-money",eur(s.money)); set("t-cigs",int(s.avoided)); set("t-life",dur(s.life));
+  set("t-packs",`${dec(s.packs,1)} ${W().packs}`);
   const nx=document.getElementById("t-next"), m=nextMilestone(s.el);
   if(nx){
-    const html = m ? `<div class="row"><div class="ring">${ringSVG(s.el/m.after)}<div class="in">${icon(m.icon,20)}</div></div>
-      <div class="grow"><div class="meta">Prochaine étape, à ${m.label}</div><div class="h3">${m.title}</div><div class="small" style="color:var(--air);font-weight:600">dans ${dur(m.after-s.el)}</div></div></div>`
-      : `<div class="row"><div class="chip-ic air">${icon("star")}</div><div class="h3">Toutes les étapes sont franchies.</div></div>`;
-    if(nx.dataset.h!==html){ nx.dataset.h=html; nx.innerHTML=html; }
+    const html = m ? `<div class="row"><div class="ring">${ringSVG(s.el/m.after,true)}<div class="in">${icon(m.icon,20)}</div></div>
+      <div class="grow"><div class="h3">${m.title}</div><div class="gtext" style="font-size:15px">à ${m.label}, dans ${dur(m.after-s.el)}</div></div></div>`
+      : `<div class="h3">Toutes les étapes sont franchies.</div>`;
+    if(nx.dataset.h!==html){
+      const old=nx.querySelector("circle.pg");
+      nx.dataset.h=html; nx.innerHTML=html;
+      const pg=nx.querySelector("circle.pg");
+      if(pg && !old && !REDUCED()){ const off=pg.getAttribute("stroke-dashoffset"); pg.style.strokeDashoffset=pg.getAttribute("stroke-dasharray"); requestAnimationFrame(()=>requestAnimationFrame(()=>{ pg.style.strokeDashoffset=off; })); }
+    }
   }
   const rs=p.reasons||[]; if(rs.length) set("t-reason","« "+rs[Math.floor(s.days)%rs.length]+" »");
   rewardsProgress(s.money).forEach((r,i)=>{
@@ -367,15 +381,14 @@ function tick(){
     const b=document.getElementById("t-rwb-"+i); if(b) b.style.width=(r.prog*100)+"%";
   });
 }
-function healthTeaser(){
+function healthTeaser(attr=""){
   const b=S.health.baseline, keys=Object.keys(S.health.entries).sort();
   if(!b||keys.length<2) return "";
   const l=S.health.entries[keys[keys.length-1]];
   if(b.rhr==null||l.rhr==null) return "";
   const d=l.rhr-b.rhr; if(d>-0.5) return "";
-  return `<section class="section"><button class="block" style="width:100%;text-align:left" data-goto="health"><div class="row">
-    <div class="chip-ic ember">${icon("heart")}</div><div class="grow"><div class="h3">Ton pouls au repos a baissé de ${dec(-d,0)} bpm</div>
-    <div class="meta">Depuis ta première mesure, d'après ta montre</div></div>${icon("chevron",18,'style="color:var(--ash)"')}</div></button></section>`;
+  return `<button class="glass" ${attr} data-goto="health"><div class="gh">${icon("watch")} Apple Watch <span class="go">Santé${icon("chevron",13)}</span></div>
+    <div class="row"><div class="gmid">−${dec(-d,0)}<span style="font-size:18px"> bpm</span></div><div class="gtext grow" style="font-size:15px">Ton pouls au repos a baissé depuis ta première mesure.</div></div></button>`;
 }
 
 /* ---------- Stats ---------- */
@@ -857,7 +870,6 @@ function updateSOSEntry(k,v){
 /* ---------- Coach ---------- */
 function newCoach(){ return {msgs:[], choices:null, typing:false, d:{}, round:1, timerEnd:null, timerLen:0, onTimer:null, q:Promise.resolve(), dead:false}; }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const REDUCED=()=>matchMedia("(prefers-reduced-motion: reduce)").matches;
 function fill(t){
   const s=stats(), w=W(), n=resistedCount();
   return t.replace(/\{dur\}/g,dur(s.el)).replace(/\{money\}/g,eur(s.money,true)).replace(/\{years\}/g,S.profile.years)
@@ -1074,7 +1086,7 @@ const PH=["Retrouver du souffle pour mes ateliers","Ne plus sentir la cigarette"
 function renderOnboarding(){
   const d=OB.d, st=OB.step, N=5;
   let body="";
-  if(st===0) body=`<div class="welcome-sky sky" id="wsky" style="padding:0;min-height:0">${SMOKE}</div>
+  if(st===0) body=`<div class="welcome-sky sky" id="wsky">${SMOKE}<img src="logo.png" alt="" width="92" height="92"></div>
     <h1 class="h1" style="font-size:42px">Souffle.</h1>
     <p class="lead">Le ciel est enfumé. À chaque heure sans cigarette, il se dégage un peu. Cette appli est faite pour une seule personne : toi. Pas de compte, rien ne quitte ton téléphone.</p>
     <label class="field"><span>Ton prénom</span><input class="inp" data-o="firstName" autocomplete="given-name" value="${esc(d.firstName)}"></label>`;
