@@ -208,13 +208,43 @@ function importFromHash(){
   if(rr!=null&&rr>4&&rr<60) e.rr=rr;
   if(steps!=null&&steps>=0&&steps<200000) e.steps=steps;
   history.replaceState(null,"",location.pathname+location.search);
-  if(!Object.keys(e).length){ toast("Aucune valeur lisible reçue du Raccourci"); return false; }
+  return applyHealth(e);
+}
+function applyHealth(e){
+  if(!Object.keys(e).length){ toast("Aucune valeur lisible reçue du raccourci"); return false; }
   e.at=Date.now();
   S.health.entries[dayKey()]=e;
   if(!S.health.baseline) S.health.baseline={...e, day:dayKey()};
   else METRICS.forEach(m=>{ if(S.health.baseline[m.k]==null && e[m.k]!=null) S.health.baseline[m.k]=e[m.k]; });
   save(); toast("Données de ta montre à jour");
   return true;
+}
+/* Texte copié par le raccourci « Souffle Santé » :
+   SOUFFLE-MONTRE / #rhr / valeurs… / #hrv / … / #pas / … / #fin */
+function parseHealthText(t){
+  if(!t || !/SOUFFLE-MONTRE/.test(t)) return null;
+  const vals={}; let cur=null;
+  String(t).split(/\r?\n/).forEach(line=>{
+    const h=line.trim().match(/^#(\w+)/); if(h){ cur=h[1]; vals[cur]=vals[cur]||[]; return; }
+    if(!cur) return; const n=parseNum(line); if(n!=null) vals[cur].push(n);
+  });
+  const avg=a=>a&&a.length?a.reduce((x,y)=>x+y,0)/a.length:null, sum=a=>a&&a.length?a.reduce((x,y)=>x+y,0):null;
+  const e={}, rhr=avg(vals.rhr), hrv=avg(vals.hrv), rr=avg(vals.rr), pas=sum(vals.pas);
+  if(rhr!=null&&rhr>25&&rhr<200) e.rhr=rhr;
+  if(hrv!=null&&hrv>0&&hrv<400) e.hrv=hrv;
+  if(rr!=null&&rr>4&&rr<60) e.rr=rr;
+  if(pas!=null&&pas>=0) e.steps=pas/7;
+  return e;
+}
+function importHealthText(t){
+  const e=parseHealthText(t);
+  if(!e){ toast("Le presse-papiers ne contient pas les mesures. Lance d'abord « Lire ma montre »."); return false; }
+  if(applyHealth(e)){ render(); return true; }
+  return false;
+}
+async function pasteHealth(){
+  try{ const t=await navigator.clipboard.readText(); importHealthText(t); }
+  catch(_){ S.ui.hmanual=true; render(); }
 }
 function healthSeries(k){
   return Object.keys(S.health.entries).sort().map(d=>({d, t:new Date(d+"T12:00").getTime(), v:S.health.entries[d][k]})).filter(x=>x.v!=null);
@@ -591,13 +621,18 @@ function viewProgress(){
 
 /* ---------- Santé ---------- */
 const SITE_URL=location.origin+location.pathname;
-const SYNC_URL="shortcuts://run-shortcut?name="+encodeURIComponent("Souffle Montre");
-function syncButton(){ return `<a class="btn air" href="${SYNC_URL}">${icon("heart",20)} Mettre à jour avec ma montre</a>`; }
+const SC_NAME="Souffle Santé".normalize("NFD"), SYNC_URL="shortcuts://run-shortcut?name="+encodeURIComponent(SC_NAME);
+function syncButton(){ return `<div style="display:grid;gap:10px">
+    <a class="btn soft" href="${SYNC_URL}">${icon("heart",20)} 1. Lire ma montre</a>
+    <button class="btn air" data-act="hpaste">${icon("download",20)} 2. Coller les mesures</button></div>
+    <p class="meta" style="margin:8px 2px 0">Le raccourci copie tes mesures. Reviens ici (« ◀ » en haut à gauche) et touche Coller.</p>
+    ${S.ui.hmanual?`<textarea class="inp" id="hpastefield" rows="3" placeholder="Appui long ici, puis Coller" style="margin-top:10px;width:100%"></textarea>
+    <button class="btn line" style="margin-top:8px" data-act="hpastemanual">Valider</button>`:""}`; }
 function shortcutGuide(){
   return `<ol class="small" style="padding-left:20px;margin:12px 0 0;line-height:1.55">
-    <li style="margin:8px 0"><a href="Souffle%20Montre.shortcut" download="Souffle Montre.shortcut"><b>Installe le raccourci « Souffle Montre »</b></a>, puis touche <b>Ajouter le raccourci</b>.</li>
-    <li style="margin:8px 0">Touche <b>Mettre à jour avec ma montre</b> et autorise l'accès à Santé.</li>
-    <li style="margin:8px 0">Pour l'écran d'accueil : dans Safari, <b>Partager</b>, <b>Sur l'écran d'accueil</b>, et <b>décoche « Ouvrir en tant qu'app web »</b>. Ainsi l'icône garde tes données.</li></ol>`;
+    <li style="margin:8px 0"><a href="%22Souffle%20Sant%5C303%5C251.shortcut%22" download><b>Installe le raccourci « Souffle Santé »</b></a>, puis touche <b>Ajouter le raccourci</b>.</li>
+    <li style="margin:8px 0">Touche <b>1. Lire ma montre</b> et autorise l'accès à Santé, puis reviens ici et touche <b>2. Coller les mesures</b>.</li>
+    <li style="margin:8px 0">Changement d'appareil ou d'icône : <b>Toi › Copier toutes mes données</b>, puis dans la nouvelle Souffle <b>Toi › Coller mes données</b>.</li></ol>`;
 }
 function viewHealth(){
   const keys=Object.keys(S.health.entries).sort(), b=S.health.baseline;
@@ -666,7 +701,9 @@ function viewMe(){
   </div></section>
   <section class="section"><div class="st"><h2 class="h2">Tes données</h2></div><div class="block">
     <p class="small ink2" style="margin:0 0 12px">Tout est stocké dans Safari sur ce téléphone. Fais une sauvegarde de temps en temps.</p>
-    <button class="btn soft" data-act="export">${icon("download",20)} Exporter une sauvegarde</button>
+    <button class="btn soft" data-act="copyall">${icon("share",20)} Copier toutes mes données</button>
+    <button class="btn soft" style="margin-top:10px" data-act="pasteall">${icon("download",20)} Coller mes données</button>
+    <button class="btn soft" style="margin-top:10px" data-act="export">${icon("download",20)} Exporter une sauvegarde</button>
     <label class="btn soft" style="margin-top:10px">${icon("upload",20)} Restaurer une sauvegarde<input type="file" accept="application/json,.json" id="importfile" class="hide"></label>
     <button class="btn line" style="margin-top:10px" data-act="restart">Recommencer à partir de maintenant</button>
     <button class="btn line" style="margin-top:10px;color:var(--ember)" data-act="erase">Tout effacer</button>
@@ -1178,6 +1215,17 @@ document.addEventListener("click",e=>{
     case "delreward": S.profile.rewards.splice(+b.dataset.i,1); save(); render(true); break;
     case "restart": if(confirm("Recommencer maintenant ? Ce que ton corps a réparé ne disparaît pas : on remet juste le compteur à zéro.")){ S.profile.quitDate=new Date().toISOString(); S.ui.tab="today"; save(); render(); } break;
     case "erase": if(confirm("Effacer toutes tes données Souffle ? C'est définitif.")){ const th=S.theme; S=blank(); S.theme=th; save(); OB.step=0; render(); } break;
+    case "hpaste": pasteHealth(); break;
+    case "hpastemanual": { const f=document.getElementById("hpastefield"); if(f&&importHealthText(f.value)){ S.ui.hmanual=false; save(); render(); } break; }
+    case "copyall": navigator.clipboard.writeText("SOUFFLE-DONNEES\n"+JSON.stringify(S)).then(()=>toast("Données copiées. Colle-les dans l'autre Souffle : Toi › Coller mes données."),()=>toast("Copie refusée par l'iPhone")); break;
+    case "pasteall": navigator.clipboard.readText().then(t=>{
+        if(!/^SOUFFLE-DONNEES\n/.test(t)){ toast("Rien à coller : copie d'abord tes données dans l'autre Souffle."); return; }
+        let d; try{ d=JSON.parse(t.replace(/^SOUFFLE-DONNEES\n/,"")); }catch(_){ toast("Données illisibles"); return; }
+        if(!d||!d.profile){ toast("Données illisibles"); return; }
+        if(S.profile && !confirm("Remplacer les données de cette Souffle par celles copiées ?")) return;
+        try{ localStorage.setItem(KEY+".prev", JSON.stringify(S)); }catch(_){}
+        localStorage.setItem(KEY, JSON.stringify(d)); location.reload();
+      },()=>toast("Collage refusé par l'iPhone")); break;
     case "export": { const blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"}), u=URL.createObjectURL(blob), l=document.createElement("a");
       l.href=u; l.download="souffle-sauvegarde-"+dayKey()+".json"; document.body.appendChild(l); l.click(); l.remove(); setTimeout(()=>URL.revokeObjectURL(u),2000); break; }
     case "obnext": if(OB.step<4){ OB.step++; renderOnboarding(); window.scrollTo(0,0);} else finishOnboarding(); break;
