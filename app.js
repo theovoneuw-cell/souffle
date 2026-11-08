@@ -630,7 +630,7 @@ function syncButton(){ return `<div style="display:grid;gap:10px">
     <button class="btn line" style="margin-top:8px" data-act="hpastemanual">Valider</button>`:""}`; }
 function shortcutGuide(){
   return `<ol class="small" style="padding-left:20px;margin:12px 0 0;line-height:1.55">
-    <li style="margin:8px 0"><a href="%22Souffle%20Sant%5C303%5C251.shortcut%22" download><b>Installe le raccourci « Souffle Santé »</b></a>, puis touche <b>Ajouter le raccourci</b>.</li>
+    <li style="margin:8px 0"><a href="Souffle%20Sant%C3%A9.shortcut" download><b>Installe le raccourci « Souffle Santé »</b></a>, puis touche <b>Ajouter le raccourci</b>.</li>
     <li style="margin:8px 0">Touche <b>1. Lire ma montre</b> et autorise l'accès à Santé, puis reviens ici et touche <b>2. Coller les mesures</b>.</li>
     <li style="margin:8px 0">Changement d'appareil ou d'icône : <b>Toi › Copier toutes mes données</b>, puis dans la nouvelle Souffle <b>Toi › Coller mes données</b>.</li></ol>`;
 }
