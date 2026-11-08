@@ -594,7 +594,7 @@ function shortcutGuide(){
   return `<a class="btn air" style="margin-top:12px" href="Souffle.shortcut" download="Souffle.shortcut">${icon("download",20)} Installer le Raccourci Souffle</a>
     <ol class="small" style="padding-left:20px;margin:12px 0 0;line-height:1.55">
     <li style="margin:8px 0">Touche le bouton ci-dessus. Si Safari le télécharge, ouvre-le depuis les téléchargements (flèche ↓), puis <b>Ajouter le raccourci</b>.</li>
-    <li style="margin:8px 0">Dans <b>Raccourcis</b>, lance <b>Souffle</b> une fois et autorise l'accès à Santé (pouls au repos, variabilité, oxygène, respiration, pas) et l'ouverture du site.</li>
+    <li style="margin:8px 0">Dans <b>Raccourcis</b>, lance <b>Souffle</b> une fois et autorise l'accès à Santé (pouls au repos, variabilité, respiration, pas) et l'ouverture du site.</li>
     <li style="margin:8px 0">Appui long sur le raccourci, <b>Détails</b> (ⓘ), puis <b>Ajouter à l'écran d'accueil</b>, avec l'icône Souffle. Chaque ouverture met tes données à jour.</li>
     <li style="margin:8px 0">En option : onglet <b>Automatisation</b>, <b>Heure de la journée</b>, 21:00, <b>Exécuter immédiatement</b>, raccourci Souffle.</li></ol>
     <a class="btn soft" style="margin-top:14px" href="icone-raccourci.png" target="_blank" rel="noopener">${icon("download",20)} Icône Souffle (appui long, Enregistrer)</a>
