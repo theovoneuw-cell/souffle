@@ -28,6 +28,8 @@ function migrate(s){
     }
     delete p.rewardName; delete p.rewardPrice;
     p.reasons = p.reasons||[];
+    p.kind = p.kind||"pack";
+    for(const k in ROLL_DEFAULTS) if(p[k]==null) p[k]=ROLL_DEFAULTS[k];
   }
   if(!["today","stats","prog","health","me"].includes(o.ui.tab)) o.ui.tab = o.ui.tab==="body" ? "prog" : "today";
   o.v=2;
@@ -87,6 +89,35 @@ function parseNum(v){
 }
 const plural = (n,one,many)=> n>1?many:one;
 
+/* Paquets ou tabac à rouler */
+function pricePerCig(p){
+  if(p.kind==="roll"){
+    const base=p.perPouch>0?p.pouchPrice/p.perPouch:0;
+    const extra=p.perDay>0?(p.extrasMonth||0)/30.4/p.perDay:0;   // feuilles et filtres
+    return base+extra;
+  }
+  return p.perPack>0?p.packPrice/p.perPack:0;
+}
+function W(p=S.profile){
+  return p&&p.kind==="roll"
+    ? {one:"roulée", One:"Roulée", many:"roulées", Many:"Roulées", packs:"blagues"}
+    : {one:"cigarette", One:"Cigarette", many:"cigarettes", Many:"Cigarettes", packs:"paquets"};
+}
+const ROLL_DEFAULTS={pouchPrice:22, perPouch:45, extrasMonth:5};
+function habitsHTML(d, mode){
+  const ob=mode==="ob", A=ob?"data-o":"data-f";
+  const st=(f,l,a,b)=> ob?obStepper(f,l,a,b):stepper(f,l,a,b,d[f]);
+  const roll=d.kind==="roll";
+  const num=(f,label,mode2)=>`<label class="field"><span>${label}</span><input class="inp tnum" inputmode="${mode2||"decimal"}" ${A}="${f}" value="${String(d[f]??"").replace(".",",")}"></label>`;
+  return `<div class="field" style="margin-top:${ob?"20px":"0"}"><span>Tu fumes</span><div class="seg full">
+      <button class="${roll?"":"on"}" data-act="${ob?"obkind":"kind"}" data-v="pack">Des paquets</button>
+      <button class="${roll?"on":""}" data-act="${ob?"obkind":"kind"}" data-v="roll">Du tabac à rouler</button></div></div>
+    ${st("perDay",roll?"Roulées par jour":"Cigarettes par jour",1,80)}
+    ${roll?num("pouchPrice","Prix d'une blague (€)")+st("perPouch","Roulées par blague",10,150)+num("extrasMonth","Feuilles et filtres (€ par mois)")
+          :num("packPrice","Prix du paquet (€)")+st("perPack","Cigarettes par paquet",10,50)}
+    ${st("years","Années de tabac",0,60)}`;
+}
+
 /* ============================================================
    Calculs
    ============================================================ */
@@ -99,14 +130,14 @@ const missionsDone = ()=> Object.keys(S.missions).length;
 
 function stats(now=Date.now()){
   const p=S.profile, quit=quitT(), el=Math.max(0,now-quit), days=el/DAY;
-  const ppc=p.perPack>0?p.packPrice/p.perPack:0;
+  const ppc=pricePerCig(p);
   const smoked=smokedCount();
   const expected=days*p.perDay;
   const avoided=Math.max(0,expected-smoked);
   const money=avoided*ppc;
   return {quit, el, days, ppc, smoked, expected, avoided, money,
     perDayMoney:p.perDay*ppc, yearly:p.perDay*365*ppc, lifetime:p.perDay*365*ppc*p.years,
-    life:avoided*MIN_PER_CIG_LIFE*MIN, smokeTime:avoided*MIN_PER_CIG_SMOKE*MIN, packs:p.perPack>0?avoided/p.perPack:0,
+    life:avoided*MIN_PER_CIG_LIFE*MIN, smokeTime:avoided*MIN_PER_CIG_SMOKE*MIN, packs:p.kind==="roll"?(p.perPouch>0?avoided/p.perPouch:0):(p.perPack>0?avoided/p.perPack:0),
     before: now<quit};
 }
 /** Clarté du ciel : progression sur une échelle log, de 0 (arrêt) à 1 (15 ans). */
@@ -139,7 +170,8 @@ function badgeState(){
     else if(b.kind==="resisted"){ cur=res.length; if(cur>=b.v) at=res[b.v-1].at; }
     else if(b.kind==="missions"){ cur=mis.length; if(cur>=b.v) at=mis[b.v-1]; }
     else if(b.kind==="sync"){ cur=nSync; if(cur>=b.v) at=syncDays[b.v-1]||Date.now(); }
-    return {...b, cur, got:at!=null, at, prog:Math.min(1,cur/b.v)};
+    const sub = b.kind==="cigs" ? W().many+" évitées" : b.sub;
+    return {...b, sub, cur, got:at!=null, at, prog:Math.min(1,cur/b.v)};
   });
 }
 
@@ -246,7 +278,7 @@ function viewToday(){
       <div class="row"><div class="grow"><div class="meta">Économisé</div><div class="gain-money" id="t-money"></div></div>
         <div class="chip-ic sun">${icon("coin")}</div></div>
       <div class="gain-sub">
-        <div><div class="meta">Cigarettes évitées</div><div class="v" id="t-cigs"></div></div>
+        <div><div class="meta">${W().Many} évitées</div><div class="v" id="t-cigs"></div></div>
         <div><div class="meta">Vie regagnée (est.)</div><div class="v" id="t-life"></div></div>
       </div>
     </section>
@@ -357,10 +389,10 @@ function viewStats(){
   /* Bilan */
   h+=`<section class="section"><div class="st"><h2 class="h2">Bilan depuis l'arrêt</h2></div><div class="kpis">
     <div class="kpi"><div class="meta">Économisé</div><div class="v">${eur(s.money,true)}</div><div class="meta">${eur(s.perDayMoney)} par jour</div></div>
-    <div class="kpi"><div class="meta">Cigarettes évitées</div><div class="v">${int(s.avoided)}</div><div class="meta">${dec(s.packs,1)} paquets</div></div>
-    <div class="kpi"><div class="meta">Temps pas passé à fumer</div><div class="v">${dur(s.smokeTime)}</div><div class="meta">~${MIN_PER_CIG_SMOKE} min par cigarette</div></div>
-    <div class="kpi"><div class="meta">Vie regagnée</div><div class="v">${dur(s.life)}</div><div class="meta">estimation, ~${MIN_PER_CIG_LIFE} min par cigarette</div></div>
-  </div>${s.smoked?`<p class="meta" style="padding:10px 6px 0;margin:0">${s.smoked} ${plural(s.smoked,"cigarette fumée a été déduite","cigarettes fumées ont été déduites")} du calcul.</p>`:""}</section>`;
+    <div class="kpi"><div class="meta">${W().Many} évitées</div><div class="v">${int(s.avoided)}</div><div class="meta">${dec(s.packs,1)} ${W().packs}</div></div>
+    <div class="kpi"><div class="meta">Temps pas passé à fumer</div><div class="v">${dur(s.smokeTime)}</div><div class="meta">~${MIN_PER_CIG_SMOKE} min par ${W().one}</div></div>
+    <div class="kpi"><div class="meta">Vie regagnée</div><div class="v">${dur(s.life)}</div><div class="meta">estimation, ~${MIN_PER_CIG_LIFE} min par ${W().one}</div></div>
+  </div>${s.smoked?`<p class="meta" style="padding:10px 6px 0;margin:0">${s.smoked} ${plural(s.smoked,W().one+" fumée a été déduite",W().many+" fumées ont été déduites")} du calcul.</p>`:""}</section>`;
 
   /* Envies */
   h+=`<section class="section"><div class="st"><h2 class="h2">Tes envies</h2><button class="linkbtn" data-act="journal">Noter</button></div>`;
@@ -372,7 +404,7 @@ function viewStats(){
     h+=`<div class="kpis">
       <div class="kpi"><div class="meta">Envies notées</div><div class="v">${env.length}</div><div class="meta">${perDayTxt(env.length,from)}</div></div>
       <div class="kpi"><div class="meta">Vaincues</div><div class="v">${env.length?Math.round(ok/env.length*100):0} %</div><div class="meta">${ok} sur ${env.length}</div></div>
-      <div class="kpi"><div class="meta">Cigarettes fumées</div><div class="v">${cig}</div><div class="meta">${cig?"sur la période":"aucune, bravo"}</div></div>
+      <div class="kpi"><div class="meta">${W().Many} fumées</div><div class="v">${cig}</div><div class="meta">${cig?"sur la période":"aucune, bravo"}</div></div>
       <div class="kpi"><div class="meta">Intensité moyenne</div><div class="v">${avgInt?dec(avgInt,1):"—"}<span class="meta"> / 5</span></div><div class="meta">${intTrend(env)}</div></div>
     </div>`;
     const ins=insights(env,L,from);
@@ -385,10 +417,10 @@ function viewStats(){
     buckets.forEach(b=>{ b.a=0; b.b=0; });
     L.forEach(e=>{ const b=buckets.find(x=>e.at>=x.t0&&e.at<x.t1); if(!b) return;
       if(e.type==="envie"&&e.ok) b.a++; if(e.type==="cigarette") b.b+=(e.n||1); });
-    buckets.forEach(b=>b.tip=`<b>${b.label}</b><br>${b.a} ${plural(b.a,"envie vaincue","envies vaincues")}<br>${b.b} ${plural(b.b,"cigarette fumée","cigarettes fumées")}`);
+    buckets.forEach(b=>b.tip=`<b>${b.label}</b><br>${b.a} ${plural(b.a,"envie vaincue","envies vaincues")}<br>${b.b} ${plural(b.b,W().one+" fumée",W().many+" fumées")}`);
     const every=Math.ceil(buckets.length/7);
     h+=`<div class="block" style="margin-top:10px"><div class="h3">${useWeeks?"Par semaine":"Par jour"}</div>
-      <div class="legend"><span><i style="background:var(--air)"></i>Envies vaincues</span><span><i style="background:var(--ember)"></i>Cigarettes fumées</span></div>
+      <div class="legend"><span><i style="background:var(--air)"></i>Envies vaincues</span><span><i style="background:var(--ember)"></i>${W().Many} fumées</span></div>
       ${columns({data:buckets.map((b,i)=>({label:b.short, axis:i%every===0?b.short:"", a:b.a, b:b.b, tip:b.tip})), height:150})}
       ${tableHTML([useWeeks?"Semaine":"Jour","Vaincues","Fumées"], buckets.filter(b=>b.a||b.b).map(b=>[b.label,b.a,b.b]))}</div>`;
 
@@ -487,7 +519,7 @@ function entryRow(e){
   const t=e.type;
   const ic = t==="envie" ? (e.ok?`<div class="chip-ic air">${icon("flame",18)}</div>`:`<div class="chip-ic ember">${icon("flame",18)}</div>`)
     : t==="cigarette" ? `<div class="chip-ic ember">${icon("cig",18)}</div>` : `<div class="chip-ic">${icon("pill",18)}</div>`;
-  const title = t==="envie" ? (e.ok?"Envie vaincue":"Envie non vaincue") : t==="cigarette" ? ((e.n||1)>1?`${e.n} cigarettes fumées`:"Cigarette fumée") : `Substitut${e.sub?" : "+(SUB_LABEL[e.sub]||e.sub).toLowerCase():""}`;
+  const title = t==="envie" ? (e.ok?"Envie vaincue":"Envie non vaincue") : t==="cigarette" ? ((e.n||1)>1?`${e.n} ${W().many} fumées`:W().One+" fumée") : `Substitut${e.sub?" : "+(SUB_LABEL[e.sub]||e.sub).toLowerCase():""}`;
   const bits=[fDate(e.at)+", "+fTime(e.at)];
   if(e.intensity) bits.push("intensité "+e.intensity+"/5");
   if(e.trigger) bits.push((TRIGGER_LABEL[e.trigger]||e.trigger).toLowerCase());
@@ -515,7 +547,7 @@ function viewProgress(){
     const bs=badgeState(), n=bs.filter(b=>b.got).length;
     h+=`<div style="padding:16px 6px 4px"><div class="display" style="font-size:44px;font-weight:720;line-height:1">${n}<span class="ash" style="font-size:22px"> / ${bs.length}</span></div>
       <div class="bar" style="margin-top:12px"><i style="width:${n/bs.length*100}%"></i></div></div>`;
-    [["time","Temps sans fumer"],["money","Argent économisé"],["cigs","Cigarettes évitées"],["resisted","Envies vaincues"],["missions","Programme"],["sync","Apple Watch"]].forEach(([k,l])=>{
+    [["time","Temps sans fumer"],["money","Argent économisé"],["cigs",W().Many+" évitées"],["resisted","Envies vaincues"],["missions","Programme"],["sync","Apple Watch"]].forEach(([k,l])=>{
       const list=bs.filter(b=>b.kind===k);
       h+=`<section class="section"><div class="st"><h2 class="h2">${l}</h2><span class="meta">${list.filter(b=>b.got).length} / ${list.length}</span></div>
         <div class="badges">${list.map(b=>`<div class="badge ${b.got?"got":""} ${b.kind}"><div class="medal">${icon(b.icon,22)}</div>
@@ -597,10 +629,8 @@ function viewMe(){
     <label class="field"><span>Dernière cigarette</span><input class="inp" type="datetime-local" data-f="quitDate" value="${toLocalInput(new Date(p.quitDate))}"></label>
   </div>
   <section class="section"><div class="st"><h2 class="h2">Tes habitudes d'avant</h2></div><div class="block">
-    ${stepper("perDay","Cigarettes par jour",1,80,p.perDay)}
-    <label class="field"><span>Prix du paquet (€)</span><input class="inp tnum" inputmode="decimal" data-f="packPrice" value="${String(p.packPrice).replace(".",",")}"></label>
-    ${stepper("perPack","Cigarettes par paquet",10,50,p.perPack)}
-    ${stepper("years","Années de tabac",0,60,p.years)}
+    ${habitsHTML(p,"me")}
+    <p class="meta" style="margin:12px 0 0">Coût d'une ${W().one} : ${eur(pricePerCig(p))}.</p>
   </div></section>
   <section class="section"><div class="st"><h2 class="h2">Tes raisons</h2></div><div class="block">
     <div class="rows">${(p.reasons||[]).map((r,i)=>`<div class="row"><div class="grow">${esc(r)}</div><button class="del" data-act="delreason" data-i="${i}" aria-label="Supprimer">${icon("x",18)}</button></div>`).join("")||`<p class="small ink2" style="margin:0">Ajoute ce qui te motive. Elles s'affichent sur l'accueil et pendant le SOS.</p>`}</div>
@@ -662,12 +692,12 @@ function renderJournal(){
   const t=J.type;
   el.innerHTML=`<div class="panel" role="dialog" aria-label="Noter dans le journal"><div class="grab"></div>
     <div class="row" style="margin-bottom:14px"><h2 class="h2 grow">Noter</h2><button class="icon-btn" data-act="jclose" aria-label="Fermer">${icon("x",20)}</button></div>
-    <div class="seg full">${[["envie","Une envie"],["cigarette","Une cigarette"],["substitut","Un substitut"]].map(([k,l])=>`<button class="${t===k?"on":""}" data-act="jtype" data-v="${k}">${l}</button>`).join("")}</div>
+    <div class="seg full">${[["envie","Une envie"],["cigarette","Une "+W().one],["substitut","Un substitut"]].map(([k,l])=>`<button class="${t===k?"on":""}" data-act="jtype" data-v="${k}">${l}</button>`).join("")}</div>
     ${t==="envie"?`
       <div class="field"><span>Intensité</span><div class="scale">${[1,2,3,4,5].map(i=>`<button class="${J.intensity===i?"on":""}" data-act="jint" data-v="${i}">${i}</button>`).join("")}</div></div>
       <div class="field"><span>Et alors ?</span><div class="seg full"><button class="${J.ok?"on":""}" data-act="jok" data-v="1">Je n'ai pas fumé</button><button class="${!J.ok?"on":""}" data-act="jok" data-v="0">J'ai fumé</button></div></div>`:""}
     ${t==="cigarette"?`<div class="field"><span>Combien</span><div class="stepper"><b>${J.n}</b><div class="pm"><button data-act="jn" data-d="-1">−</button><button data-act="jn" data-d="1">+</button></div></div></div>
-      <p class="small ink2" style="margin:10px 2px 0">Un faux pas n'efface pas tes progrès. Elles seront déduites de tes cigarettes évitées et de l'argent, pour des chiffres honnêtes.</p>`:""}
+      <p class="small ink2" style="margin:10px 2px 0">Un faux pas n'efface pas tes progrès. Elles seront déduites de tes ${W().many} évitées et de l'argent, pour des chiffres honnêtes.</p>`:""}
     ${t==="substitut"?`<div class="field"><span>Lequel</span><div class="chips">${SUBSTITUTES.map(([k,l])=>`<button class="chip ${J.sub===k?"on":""}" data-act="jsub" data-v="${k}">${l}</button>`).join("")}</div></div>`:""}
     ${t!=="substitut"?`<div class="field"><span>Déclencheur</span><div class="chips">${TRIGGERS.map(([k,l])=>`<button class="chip ${J.trigger===k?"on":""}" data-act="jtrig" data-v="${k}">${l}</button>`).join("")}</div></div>`:""}
     <label class="field"><span>Note (facultatif)</span><textarea class="inp" id="jnote" rows="2" placeholder="Où tu étais, ce que tu ressentais…">${esc(J.note)}</textarea></label>
@@ -853,7 +883,7 @@ async function shareCard(){
   x.fillStyle="rgba(255,255,255,.94)"; roundRect(x,64,820,W-128,420,48); x.fill();
   x.fillStyle="#16222B";
   const col=(lbl,val,cx,cy)=>{ x.font=`500 34px system-ui, sans-serif`; x.fillStyle="#4A5864"; x.fillText(lbl,cx,cy); x.font=`700 76px ${F}`; x.fillStyle="#16222B"; x.fillText(val,cx,cy+86); };
-  col("Économisé",eur(s.money,true),120,920); col("Cigarettes évitées",int(s.avoided),580,920);
+  col("Économisé",eur(s.money,true),120,920); col(W().Many+" évitées",int(s.avoided),580,920);
   col("Vie regagnée",dur(s.life),120,1110); col("Étapes du corps",reached(s.el)+" / "+MILESTONES.length,580,1110);
   const blob=await new Promise(r=>cv.toBlob(r,"image/png"));
   const file=new File([blob],"souffle-"+d+"-jours.png",{type:"image/png"});
@@ -869,7 +899,7 @@ function roundRect(x,X,Y,w,h,r){ x.beginPath(); x.moveTo(X+r,Y); x.arcTo(X+w,Y,X
 /* ============================================================
    Onboarding
    ============================================================ */
-let OB={step:0, d:{firstName:"", now:true, quitDate:null, perDay:15, packPrice:12.5, perPack:20, years:10, reasons:["","",""], rwName:"", rwPrice:""}};
+let OB={step:0, d:{firstName:"", now:true, quitDate:null, kind:"pack", perDay:15, packPrice:12.5, perPack:20, ...ROLL_DEFAULTS, years:10, reasons:["","",""], rwName:"", rwPrice:""}};
 const PH=["Retrouver du souffle pour mes ateliers","Ne plus sentir la cigarette","Me prouver que j'en suis capable"];
 function renderOnboarding(){
   const d=OB.d, st=OB.step, N=5;
@@ -882,12 +912,9 @@ function renderOnboarding(){
     <div class="seg full" style="margin-top:20px"><button class="${d.now?"on":""}" data-act="obnow" data-v="1">Maintenant</button><button class="${d.now?"":"on"}" data-act="obnow" data-v="0">Choisir une date</button></div>
     ${d.now?`<p class="small ink2" style="margin:14px 4px 0">Le compteur démarre dès que tu valides.</p>`
       :`<label class="field"><span>Date et heure</span><input class="inp" type="datetime-local" data-o="quitDate" value="${d.quitDate||toLocalInput(new Date())}"></label>`}`;
-  else if(st===2){ const ppc=d.perPack>0?d.packPrice/d.perPack:0, y=d.perDay*365*ppc;
+  else if(st===2){ const y=d.perDay*365*pricePerCig(d);
     body=`<h1 class="h1">Tes habitudes.</h1><p class="lead">Pour calculer exactement ce que tu gagnes. C'est entre toi et toi.</p>
-    ${obStepper("perDay","Cigarettes par jour",1,80)}
-    <label class="field"><span>Prix du paquet (€)</span><input class="inp tnum" inputmode="decimal" data-o="packPrice" value="${String(d.packPrice).replace(".",",")}"></label>
-    ${obStepper("perPack","Cigarettes par paquet",10,50)}
-    ${obStepper("years","Années de tabac",0,60)}
+    ${habitsHTML(d,"ob")}
     <div class="block flat" style="margin-top:18px"><div class="meta">Ça te coûtait</div><div class="display" style="font-size:32px;font-weight:700" id="oby">${eur(y,true)} par an</div>
       <div class="small ink2" id="obl">${eur(y*d.years,true)} partis en fumée depuis le début.</div></div>`; }
   else if(st===3) body=`<h1 class="h1">Tes raisons.</h1><p class="lead">Avec tes mots. Souffle te les remettra sous les yeux pile quand l'envie arrive.</p>
@@ -909,7 +936,7 @@ function obStepper(f,label,mn,mx){
     <button data-act="obstep" data-f="${f}" data-d="1" data-min="${mn}" data-max="${mx}" aria-label="Plus">+</button></div></div></div>`;
 }
 function obRewardHint(){
-  const d=OB.d, ppc=d.perPack>0?d.packPrice/d.perPack:0, perDay=d.perDay*ppc, price=parseNum(d.rwPrice)||0;
+  const d=OB.d, perDay=d.perDay*pricePerCig(d), price=parseNum(d.rwPrice)||0;
   if(!price||!perDay) return "Mets un prix pour voir dans combien de temps elle est à toi.";
   return `À toi dans <b>${Math.ceil(price/perDay)} jours</b> sans fumer.`;
 }
@@ -917,7 +944,8 @@ function finishOnboarding(){
   const d=OB.d, price=parseNum(d.rwPrice)||0;
   S.profile={firstName:d.firstName.trim(),
     quitDate:(d.now||!d.quitDate)?new Date().toISOString():new Date(d.quitDate).toISOString(),
-    perDay:d.perDay, packPrice:d.packPrice, perPack:d.perPack, years:d.years,
+    kind:d.kind, perDay:d.perDay, packPrice:d.packPrice, perPack:d.perPack,
+    pouchPrice:d.pouchPrice, perPouch:d.perPouch, extrasMonth:d.extrasMonth, years:d.years,
     reasons:d.reasons.map(r=>r.trim()).filter(Boolean),
     rewards:price>0?[{id:uid(), name:d.rwName.trim()||"Ma récompense", price}]:[]};
   S.ui.tab="today"; S.ui.silentUnlock=true; save(); render();
@@ -976,6 +1004,8 @@ document.addEventListener("click",e=>{
       l.href=u; l.download="souffle-sauvegarde-"+dayKey()+".json"; document.body.appendChild(l); l.click(); l.remove(); setTimeout(()=>URL.revokeObjectURL(u),2000); break; }
     case "obnext": if(OB.step<4){ OB.step++; renderOnboarding(); window.scrollTo(0,0);} else finishOnboarding(); break;
     case "obback": OB.step=Math.max(0,OB.step-1); renderOnboarding(); break;
+    case "obkind": OB.d.kind=v; renderOnboarding(); break;
+    case "kind": S.profile.kind=v; save(); render(true); break;
     case "obnow": OB.d.now=v==="1"; if(!OB.d.now&&!OB.d.quitDate) OB.d.quitDate=toLocalInput(new Date()); renderOnboarding(); break;
     case "obstep": { const f=b.dataset.f; OB.d[f]=clamp(OB.d[f]+ +b.dataset.d, +b.dataset.min, +b.dataset.max); renderOnboarding(); break; }
   }
@@ -985,13 +1015,13 @@ document.addEventListener("input",e=>{
   if(t.dataset.o){
     const k=t.dataset.o;
     if(k==="reason") OB.d.reasons[+t.dataset.i]=t.value;
-    else if(k==="packPrice"){ const n=parseNum(t.value); if(n!=null){ OB.d.packPrice=n; const ppc=OB.d.perPack>0?n/OB.d.perPack:0, y=OB.d.perDay*365*ppc; set("oby",eur(y,true)+" par an"); set("obl",eur(y*OB.d.years,true)+" partis en fumée depuis le début."); } }
+    else if(k==="packPrice"||k==="pouchPrice"||k==="extrasMonth"){ const n=parseNum(t.value); if(n!=null||k==="extrasMonth"){ OB.d[k]=n||0; const y=OB.d.perDay*365*pricePerCig(OB.d); set("oby",eur(y,true)+" par an"); set("obl",eur(y*OB.d.years,true)+" partis en fumée depuis le début."); } }
     else if(k==="rwPrice"){ OB.d.rwPrice=t.value; const r=document.getElementById("obr"); if(r) r.innerHTML=obRewardHint(); }
     else OB.d[k]=t.value;
   }
   if(t.dataset.f && S.profile){
     const k=t.dataset.f;
-    if(k==="packPrice"){ const n=parseNum(t.value); if(n!=null) S.profile.packPrice=n; }
+    if(k==="packPrice"||k==="pouchPrice"||k==="extrasMonth"){ const n=parseNum(t.value); if(n!=null) S.profile[k]=n; else if(k==="extrasMonth") S.profile[k]=0; }
     else if(k==="quitDate"){ if(t.value) S.profile.quitDate=new Date(t.value).toISOString(); }
     else S.profile[k]=t.value;
     save();
