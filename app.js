@@ -10,7 +10,7 @@ const MIN_PER_CIG_SMOKE = 6;   // temps moyen passé à fumer une cigarette (est
 
 const ROLL_DEFAULTS={pouchPrice:22, perPouch:45, extrasMonth:5};
 function blank(){
-  return {v:2, profile:null, log:[], missions:{}, seen:{}, best:{game:0},
+  return {v:4, profile:null, log:[], missions:{}, seen:{}, best:{game:0}, attempts:[],
           health:{entries:{}, baseline:null}, ui:{tab:"today", range:"30", prog:"body"}, theme:"auto"};
 }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
@@ -33,7 +33,29 @@ function migrate(s){
     for(const k in ROLL_DEFAULTS) if(p[k]==null) p[k]=ROLL_DEFAULTS[k];
   }
   if(!["today","stats","prog","health","me"].includes(o.ui.tab)) o.ui.tab = o.ui.tab==="body" ? "prog" : "today";
-  o.v=2;
+  o.attempts=Array.isArray(o.attempts)?o.attempts:[];
+  if((s.v||1)<4 && p){
+    /* Doublons : deux cigarettes notées à moins de 15 min d'écart = une seule. */
+    const cigs=o.log.filter(e=>e.type==="cigarette").sort((a,b)=>a.at-b.at), drop=new Set();
+    let last=-Infinity; for(const c of cigs){ if(c.at-last<15*60e3) drop.add(c.id); else last=c.at; }
+    o.log=o.log.filter(e=>!drop.has(e.id));
+    /* Cigarette du 8 novembre à 23 h 30, signalée hors de l'appli. */
+    const T=Date.parse("2026-11-08T22:30:00Z");
+    if(new Date(p.quitDate).getTime()<T && !o.log.some(e=>e.type==="cigarette"&&Math.abs(e.at-T)<60*60e3))
+      o.log.push({id:uid(), at:T, type:"cigarette", n:1, note:"Ajoutée : dimanche 23 h 30"});
+    /* La dernière cigarette après l'arrêt remet le compteur à zéro. */
+    const quit=new Date(p.quitDate).getTime();
+    const smoked=o.log.filter(e=>e.type==="cigarette"&&e.at>=quit).sort((a,b)=>a.at-b.at);
+    const after=smoked[smoked.length-1];
+    if(after){
+      let st=quit; smoked.forEach(c=>{ o.attempts.push({start:st, end:c.at}); st=c.at; });
+      after.reset={quit:p.quitDate, missions:{...o.missions}, seen:{...o.seen}};
+      p.quitDate=new Date(after.at+1000).toISOString();
+      o.missions={}; o.seen=Object.fromEntries(Object.entries(o.seen||{}).filter(([k])=>k[0]==="s"));
+      o.ui.silentUnlock=true; o.ui.notice="reset";
+    }
+  }
+  o.v=4;
   return o;
 }
 /* Chargement prudent : une copie brute est gardée avant toute migration,
@@ -135,6 +157,28 @@ const smokedCount = ()=> sinceQuit().filter(e=>e.type==="cigarette").reduce((a,e
 const cravings = ()=> sinceQuit().filter(e=>e.type==="envie");
 const resistedCount = ()=> cravings().filter(e=>e.ok).length;
 const missionsDone = ()=> Object.keys(S.missions).length;
+
+/* Une cigarette fumée remet à zéro le compteur, les étapes du corps, les trophées et le programme.
+   Le journal et la meilleure série sont gardés ; supprimer l'entrée annule la remise à zéro. */
+function resetOnSmoke(cig){
+  const p=S.profile; if(!p) return false;
+  const quit=new Date(p.quitDate).getTime();
+  if(cig.at<quit) return false;
+  cig.reset={quit:p.quitDate, missions:{...S.missions}, seen:{...S.seen}};
+  S.attempts.push({start:quit, end:cig.at});
+  p.quitDate=new Date(cig.at+1000).toISOString();
+  S.missions={};
+  S.seen=Object.fromEntries(Object.entries(S.seen).filter(([k])=>k[0]==="s"));
+  return true;
+}
+function undoReset(e){
+  if(!e||!e.reset||!S.profile) return false;
+  if(S.profile.quitDate!==new Date(e.at+1000).toISOString()) return false;
+  S.profile.quitDate=e.reset.quit; S.missions=e.reset.missions||{}; S.seen=e.reset.seen||{};
+  S.attempts=S.attempts.filter(a=>a.end!==e.at);
+  return true;
+}
+function bestStreak(){ return Math.max(Date.now()-quitT(), ...S.attempts.map(a=>a.end-a.start)); }
 
 function stats(now=Date.now()){
   const p=S.profile, quit=quitT(), el=Math.max(0,now-quit), days=el/DAY;
@@ -271,6 +315,7 @@ function render(keepScroll){
   bindCharts($app);
   if(!keepScroll){ const v=$app.querySelector(".page"); if(v) v.classList.add("view-in"); }
   if(t==="today"){ HERO_ENTER=!keepScroll; tick(); timer=setInterval(tick,1000); checkUnlocks(); }
+  if(S.ui.notice==="reset"){ delete S.ui.notice; save(); setTimeout(()=>toast("Compteur remis à zéro depuis dimanche 23 h 30"),700); }
   if(!keepScroll) window.scrollTo(0,0);
 }
 function tabsBar(t){
@@ -440,7 +485,7 @@ function tick(){
     const de=document.getElementById("t-days"); if(de&&de.dataset.done) set("t-days",String(d));
     { const du=document.getElementById("t-du"), txt=`${plural(d,"jour","jours")} <b>sans fumer</b>`; if(du && du.innerHTML!==txt) du.innerHTML=txt; }
     set("t-clock",clock(s.el));
-    set("t-steps",`${n} ${plural(n,"étape","étapes")} du corps sur ${MILESTONES.length}`);
+    set("t-steps",`${n} ${plural(n,"étape","étapes")} du corps sur ${MILESTONES.length}`+(S.attempts.length?`, record : ${dur(bestStreak())}`:""));
     const tg=document.getElementById("trees"); if(tg && tg.dataset.n!==String(n)){ tg.dataset.n=String(n); tg.innerHTML=treesSVG(n); }
   }
   set("t-money",eur(s.money)); set("t-cigs",int(s.avoided)); set("t-life",dur(s.life));
@@ -490,7 +535,7 @@ function viewStats(){
     <div class="seg full" role="tablist">${[["7","7 jours"],["30","30 jours"],["all","Depuis l'arrêt"]].map(([k,l])=>`<button class="${range===k?"on":""}" data-act="range" data-v="${k}">${l}</button>`).join("")}</div>`;
 
   /* Bilan */
-  h+=`<section class="section"><div class="st"><h2 class="h2">Bilan depuis l'arrêt</h2></div><div class="kpis">
+  h+=`<section class="section"><div class="st"><h2 class="h2">Bilan depuis l'arrêt</h2>${S.attempts.length?`<span class="meta">Meilleure série : ${dur(bestStreak())}</span>`:""}</div><div class="kpis">
     <div class="kpi"><div class="meta">Économisé</div><div class="v">${eur(s.money,true)}</div><div class="meta">${eur(s.perDayMoney)} par jour</div></div>
     <div class="kpi"><div class="meta">${W().Many} évitées</div><div class="v">${int(s.avoided)}</div><div class="meta">${dec(s.packs,1)} ${W().packs}</div></div>
     <div class="kpi"><div class="meta">Temps pas passé à fumer</div><div class="v">${dur(s.smokeTime)}</div><div class="meta">~${MIN_PER_CIG_SMOKE} min par ${W().one}</div></div>
@@ -802,7 +847,7 @@ function renderJournal(){
       <div class="field"><span>Intensité</span><div class="scale">${[1,2,3,4,5].map(i=>`<button class="${J.intensity===i?"on":""}" data-act="jint" data-v="${i}">${i}</button>`).join("")}</div></div>
       <div class="field"><span>Et alors ?</span><div class="seg full"><button class="${J.ok?"on":""}" data-act="jok" data-v="1">Je n'ai pas fumé</button><button class="${!J.ok?"on":""}" data-act="jok" data-v="0">J'ai fumé</button></div></div>`:""}
     ${t==="cigarette"?`<div class="field"><span>Combien</span><div class="stepper"><b>${J.n}</b><div class="pm"><button data-act="jn" data-d="-1">−</button><button data-act="jn" data-d="1">+</button></div></div></div>
-      <p class="small ink2" style="margin:10px 2px 0">Un faux pas n'efface pas tes progrès. Elles seront déduites de tes ${W().many} évitées et de l'argent, pour des chiffres honnêtes.</p>`:""}
+      <p class="small ink2" style="margin:10px 2px 0">Ton compteur, les étapes du corps, tes trophées et ton programme repartiront de zéro. Ton journal et ta meilleure série sont gardés.</p>`:""}
     ${t==="substitut"?`<div class="field"><span>Lequel</span><div class="chips">${SUBSTITUTES.map(([k,l])=>`<button class="chip ${J.sub===k?"on":""}" data-act="jsub" data-v="${k}">${l}</button>`).join("")}</div></div>`:""}
     ${t!=="substitut"?`<div class="field"><span>Déclencheur</span><div class="chips">${TRIGGERS.map(([k,l])=>`<button class="chip ${J.trigger===k?"on":""}" data-act="jtrig" data-v="${k}">${l}</button>`).join("")}</div></div>`:""}
     <label class="field"><span>Note (facultatif)</span><textarea class="inp" id="jnote" rows="2" placeholder="Où tu étais, ce que tu ressentais…">${esc(J.note)}</textarea></label>
@@ -815,12 +860,13 @@ function saveJournal(){
   const atv=(document.getElementById("jat")||{}).value;
   const at=atv?new Date(atv).getTime():Date.now();
   const base={id:uid(), at, note:note.trim()||undefined};
+  let didReset=false;
   if(J.type==="envie"){
     S.log.push({...base, type:"envie", ok:J.ok, intensity:J.intensity, trigger:J.trigger||undefined});
-    if(!J.ok) S.log.push({id:uid(), at, type:"cigarette", n:1, trigger:J.trigger||undefined});
-  }else if(J.type==="cigarette") S.log.push({...base, type:"cigarette", n:J.n, trigger:J.trigger||undefined});
+    if(!J.ok){ const c={id:uid(), at, type:"cigarette", n:1, trigger:J.trigger||undefined}; S.log.push(c); didReset=resetOnSmoke(c); }
+  }else if(J.type==="cigarette"){ const c={...base, type:"cigarette", n:J.n, trigger:J.trigger||undefined}; S.log.push(c); didReset=resetOnSmoke(c); }
   else S.log.push({...base, type:"substitut", sub:J.sub, n:1});
-  save(); closeJournal(); toast("Noté dans ton journal"); render(true);
+  save(); closeJournal(); toast(didReset?"Compteur remis à zéro. On repart.":"Noté dans ton journal"); render(!didReset);
 }
 
 /* ============================================================
@@ -922,7 +968,7 @@ function sosResultHTML(){
       <div style="width:84px;height:84px;border-radius:50%;background:rgba(255,255,255,.22);display:grid;place-items:center;margin-bottom:16px">${icon(e.ok?"check":"wind",40)}</div>
       <div class="h1" style="color:#fff">${e.ok?"Envie battue.":"Ce n'est pas un échec."}</div>
       <p style="margin:10px 0 0;font-size:17px;max-width:380px;opacity:.95">${e.ok?`${n} ${plural(n,"envie vaincue","envies vaincues")} depuis l'arrêt. Ton cerveau apprend à chaque fois.`
-        :"Un faux pas n'efface pas ce que ton corps a déjà réparé. Repère ce qui a déclenché l'envie, et on repart."}</p>
+        :`Ton compteur repart de zéro. Ta meilleure série : ${dur(bestStreak())}, et elle reste à toi. Repère ce qui a déclenché l'envie, et on repart.`}</p>
       ${e.intensity&&e.after!=null?`<p class="display" style="margin:14px 0 0;font-size:20px;font-weight:650">Intensité ${e.intensity} → ${e.after}</p>`:""}
       ${!e.ok&&e.trigger&&TRIGGER_COACH[e.trigger]?`<div class="tipcard" style="margin-top:20px"><div class="small" style="font-weight:650;opacity:.85">La prochaine fois (${(TRIGGER_LABEL[e.trigger]||"").toLowerCase()})</div><p style="margin:6px 0 0">${TRIGGER_COACH[e.trigger].act}</p></div>`:""}
       ${heavyCravings()?`<div class="tipcard" style="margin-top:14px"><p style="margin:0">Tes envies sont souvent fortes ces derniers jours. Ce n'est pas un manque de volonté : un tabacologue (39 89, gratuit) ou ton médecin peuvent t'aider avec des substituts bien dosés.</p></div>`:""}
@@ -941,7 +987,7 @@ function sosResult(ok){
   const cd=SOS.coach&&SOS.coach.d;
   if(cd){ if(cd.intensity) entry.intensity=cd.intensity; if(cd.after!=null) entry.after=cd.after; if(cd.trigger) entry.trigger=cd.trigger; if(cd.thought) entry.thought=cd.thought; if(cd.intensity) entry.coach=true; }
   S.log.push(entry);
-  if(!ok) S.log.push({id:uid(), at, type:"cigarette", n:1, link:entry.id, trigger:entry.trigger});
+  if(!ok){ const c={id:uid(), at, type:"cigarette", n:1, link:entry.id, trigger:entry.trigger}; S.log.push(c); resetOnSmoke(c); }
   save(); SOS.entry=entry; if(SOS.coach){ SOS.coach.dead=true; } cancelAnimationFrame(SOS.raf); if(SOS.game) stopGame();
   buzz(ok?[30,50,30]:60); renderSOS();
 }
@@ -1251,7 +1297,9 @@ document.addEventListener("click",e=>{
     case "jsub": J.sub=v; renderJournal(); break;
     case "jtrig": J.note=(document.getElementById("jnote")||{}).value||""; J.trigger=J.trigger===v?null:v; renderJournal(); break;
     case "jsave": saveJournal(); break;
-    case "delentry": { const id=b.dataset.id; if(confirm("Supprimer cette entrée du journal ?")){ S.log=S.log.filter(x=>x.id!==id && x.link!==id); save(); render(true);} break; }
+    case "delentry": { const id=b.dataset.id; if(confirm("Supprimer cette entrée du journal ?")){
+      const gone=S.log.filter(x=>x.id===id||x.link===id), undone=gone.some(undoReset);
+      S.log=S.log.filter(x=>x.id!==id && x.link!==id); save(); render(true); if(undone) toast("Remise à zéro annulée"); } break; }
     case "range": S.ui.range=v; save(); render(true); break;
     case "jall": S.ui.jall=!S.ui.jall; save(); render(true); break;
     case "prog": S.ui.prog=v; save(); render(true); break;
@@ -1265,7 +1313,7 @@ document.addEventListener("click",e=>{
     case "addreward": { const n=document.getElementById("rwname").value.trim(), p=parseNum(document.getElementById("rwprice").value);
       if(n&&p>0){ S.profile.rewards.push({id:uid(), name:n, price:p}); save(); render(true);} else toast("Indique un nom et un prix"); break; }
     case "delreward": S.profile.rewards.splice(+b.dataset.i,1); save(); render(true); break;
-    case "restart": if(confirm("Recommencer maintenant ? Ce que ton corps a réparé ne disparaît pas : on remet juste le compteur à zéro.")){ S.profile.quitDate=new Date().toISOString(); S.ui.tab="today"; save(); render(); } break;
+    case "restart": if(confirm("Recommencer maintenant ? Ce que ton corps a réparé ne disparaît pas : on remet juste le compteur à zéro.")){ S.attempts.push({start:quitT(), end:Date.now()}); S.profile.quitDate=new Date().toISOString(); S.missions={}; S.ui.tab="today"; save(); render(); } break;
     case "erase": if(confirm("Effacer toutes tes données Souffle ? C'est définitif.")){ const th=S.theme; S=blank(); S.theme=th; save(); OB.step=0; render(); } break;
     case "hpaste": pasteHealth(); break;
     case "hpastemanual": { const f=document.getElementById("hpastefield"); if(f&&importHealthText(f.value)){ S.ui.hmanual=false; save(); render(); } break; }
