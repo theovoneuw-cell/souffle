@@ -177,7 +177,7 @@ const THOUGHTS = [
     "Les études le montrent : une fois le sevrage passé, le stress et l'anxiété baissent en moyenne chez les ex-fumeurs.",
     "Ton corps sait se calmer sans elle. On va le prouver dans deux minutes."]],
   ["echec","« Je ne vais pas y arriver »",[
-    "Regarde les faits : {dur} sans fumer et {resisted} déjà vaincues. Tu y arrives, là, maintenant.",
+    "Regarde les faits : {dur} sans fumer{resisted}. Tu y arrives, là, maintenant.",
     "Tu n'as pas à tenir pour toujours. Juste les cinq prochaines minutes."]],
   ["manque","« Ça me manque, tout simplement »",[
     "C'est normal : {years} ans d'habitude, ça laisse une trace.",

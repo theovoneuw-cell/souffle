@@ -10,7 +10,7 @@ const MIN_PER_CIG_SMOKE = 6;   // temps moyen passé à fumer une cigarette (est
 
 const ROLL_DEFAULTS={pouchPrice:22, perPouch:45, extrasMonth:5};
 function blank(){
-  return {v:4, profile:null, log:[], missions:{}, seen:{}, best:{game:0}, attempts:[],
+  return {v:5, profile:null, log:[], missions:{}, seen:{}, best:{game:0}, attempts:[],
           health:{entries:{}, baseline:null}, ui:{tab:"today", range:"30", prog:"body"}, theme:"auto"};
 }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
@@ -55,7 +55,7 @@ function migrate(s){
       o.ui.silentUnlock=true; o.ui.notice="reset";
     }
   }
-  o.v=4;
+  o.v=5;
   return o;
 }
 /* Chargement prudent : une copie brute est gardée avant toute migration,
@@ -158,8 +158,10 @@ const cravings = ()=> sinceQuit().filter(e=>e.type==="envie");
 const resistedCount = ()=> cravings().filter(e=>e.ok).length;
 const missionsDone = ()=> Object.keys(S.missions).length;
 
-/* Une cigarette fumée remet à zéro le compteur, les étapes du corps, les trophées et le programme.
-   Le journal et la meilleure série sont gardés ; supprimer l'entrée annule la remise à zéro. */
+/* Une cigarette fumée remet tout à zéro : compteur, argent, étapes du corps, trophées, programme,
+   et le point de départ des mesures de la montre (calculé depuis la date d'arrêt).
+   Le journal et la meilleure série sont gardés ; supprimer l'entrée annule la remise à zéro.
+   C'est le seul endroit où le compteur repart : tous les chemins passent par ici. */
 function resetOnSmoke(cig){
   const p=S.profile; if(!p) return false;
   const quit=new Date(p.quitDate).getTime();
@@ -167,18 +169,57 @@ function resetOnSmoke(cig){
   cig.reset={quit:p.quitDate, missions:{...S.missions}, seen:{...S.seen}};
   S.attempts.push({start:quit, end:cig.at});
   p.quitDate=new Date(cig.at+1000).toISOString();
-  S.missions={};
-  S.seen=Object.fromEntries(Object.entries(S.seen).filter(([k])=>k[0]==="s"));
+  S.missions={}; S.seen={};
+  S.ui.silentUnlock=true;
   return true;
 }
 function undoReset(e){
   if(!e||!e.reset||!S.profile) return false;
-  if(S.profile.quitDate!==new Date(e.at+1000).toISOString()) return false;
+  if(S.profile.quitDate!==new Date(e.at+1000).toISOString()){
+    /* Ce n'est plus la dernière remise à zéro : on recolle les deux séries qu'elle séparait. */
+    const i=S.attempts.findIndex(a=>a.end===e.at); if(i<0) return false;
+    const next=S.attempts.find(a=>a.start===e.at+1000);
+    if(next){
+      next.start=S.attempts[i].start;
+      const later=S.log.find(x=>x.reset&&x.at===next.end); if(later) later.reset.quit=e.reset.quit;
+    }
+    S.attempts.splice(i,1);
+    return false;
+  }
   S.profile.quitDate=e.reset.quit; S.missions=e.reset.missions||{}; S.seen=e.reset.seen||{};
   S.attempts=S.attempts.filter(a=>a.end!==e.at);
   return true;
 }
+/* Note une cigarette fumée. Renvoie ce qu'il faut pour l'écran « On repart ». */
+function logSlip({at, n=1, trigger, note, link}){
+  at=Math.min(at||Date.now(), Date.now());
+  const lasted=Math.max(0,at-quitT()), before=Math.max(0,...S.attempts.map(a=>a.end-a.start));
+  const c={id:uid(), at, type:"cigarette", n, trigger:trigger||undefined, note:note||undefined, link};
+  S.log.push(c);
+  const did=resetOnSmoke(c);
+  save();
+  return {id:c.id, did, lasted, record:lasted>before, best:Math.max(lasted,before)};
+}
+/* Remet les données d'accord avec la date d'arrêt : une mission cochée avant, ou pour un jour
+   pas encore atteint, appartient à une autre série ; pareil pour les trophées déjà fêtés. */
+function reconcile(){
+  if(!S.profile) return;
+  const quit=quitT(), day=Math.floor(Math.max(0,Date.now()-quit)/DAY)+1;
+  for(const d in S.missions) if(S.missions[d]<quit || +d>day) delete S.missions[d];
+  S.attempts.forEach(a=>{ if(a.end>quit) a.end=quit; });
+  S.attempts=S.attempts.filter(a=>a.end>a.start);
+  const got=new Set(badgeState().filter(b=>b.got).map(b=>b.id));
+  for(const k in S.seen) if(!got.has(k)) delete S.seen[k];
+}
 function bestStreak(){ return Math.max(Date.now()-quitT(), ...S.attempts.map(a=>a.end-a.start)); }
+/** Le grand chiffre de l'accueil : secondes, puis minutes la première heure, heures le premier jour, puis jours.
+    Un grand « 0 » pendant vingt-quatre heures après un craquage, c'est une punition ; là, ça repart tout de suite. */
+function bigUnit(el){
+  if(el<MIN){ const n=Math.floor(el/1000); return {n, word:plural(n,"seconde","secondes"), rest:S.attempts.length?"C'est reparti.":"C'est parti."}; }
+  if(el<HOUR){ const n=Math.floor(el/MIN); return {n, word:plural(n,"minute","minutes"), rest:String(Math.floor(el/1000)%60).padStart(2,"0")+" s"}; }
+  if(el<DAY){ const n=Math.floor(el/HOUR), s=Math.floor(el/1000); return {n, word:plural(n,"heure","heures"), rest:`${String(Math.floor(s%3600/60)).padStart(2,"0")} min ${String(s%60).padStart(2,"0")} s`}; }
+  const n=Math.floor(el/DAY); return {n, word:plural(n,"jour","jours"), rest:clock(el)};
+}
 
 function stats(now=Date.now()){
   const p=S.profile, quit=quitT(), el=Math.max(0,now-quit), days=el/DAY;
@@ -212,8 +253,8 @@ function badgeState(){
   const s=stats(), rate=s.perDayMoney/DAY, cigRate=S.profile.perDay/DAY;
   const res=cravings().filter(e=>e.ok).sort((a,b)=>a.at-b.at);
   const mis=Object.values(S.missions).sort((a,b)=>a-b);
-  const nSync=Object.keys(S.health.entries).length;
-  const syncDays=Object.values(S.health.entries).map(e=>e.at).sort((a,b)=>a-b);
+  const syncDays=Object.values(S.health.entries).map(e=>e.at).filter(t=>t>=s.quit).sort((a,b)=>a-b);
+  const nSync=syncDays.length;
   return BADGES.map(b=>{
     let cur=0, at=null;
     if(b.kind==="time"){ cur=s.el; if(cur>=b.v) at=s.quit+b.v; }
@@ -223,7 +264,9 @@ function badgeState(){
     else if(b.kind==="missions"){ cur=mis.length; if(cur>=b.v) at=mis[b.v-1]; }
     else if(b.kind==="sync"){ cur=nSync; if(cur>=b.v) at=syncDays[b.v-1]||Date.now(); }
     const sub = b.kind==="cigs" ? W().many+" évitées" : b.sub;
-    return {...b, sub, cur, got:at!=null, at, prog:Math.min(1,cur/b.v)};
+    /* Dans combien de temps il tombe, quand ça ne dépend que du temps qui passe. */
+    const eta = at!=null||s.before ? null : b.kind==="time" ? b.v-cur : b.kind==="money"&&rate>0 ? (b.v-cur)/rate : b.kind==="cigs"&&cigRate>0 ? (b.v-cur)/cigRate : null;
+    return {...b, sub, cur, got:at!=null, at, eta, prog:Math.min(1,cur/b.v)};
   });
 }
 
@@ -290,6 +333,16 @@ async function pasteHealth(){
   try{ const t=await navigator.clipboard.readText(); importHealthText(t); }
   catch(_){ S.ui.hmanual=true; render(); }
 }
+/** Point de départ des mesures : la dernière prise avant la date d'arrêt, sinon la première.
+    Calculé, jamais stocké : après un craquage il suit tout seul le nouveau départ. */
+function healthRef(){
+  const days=Object.keys(S.health.entries).sort(); if(!days.length) return null;
+  const quit=S.profile?quitT():0;
+  let i=0; days.forEach((d,k)=>{ if(S.health.entries[d].at<=quit) i=k; });
+  const ref={day:days[i]};
+  METRICS.forEach(m=>{ for(let k=i;k<days.length;k++){ const v=S.health.entries[days[k]][m.k]; if(v!=null){ ref[m.k]=v; break; } } });
+  return ref;
+}
 function healthSeries(k){
   return Object.keys(S.health.entries).sort().map(d=>({d, t:new Date(d+"T12:00").getTime(), v:S.health.entries[d][k]})).filter(x=>x.v!=null);
 }
@@ -321,13 +374,26 @@ function render(keepScroll){
 function tabsBar(t){
   const tabs=[["today","Aujourd'hui","today"],["stats","Stats","stats"],["prog","Progrès","trophy"],["health","Santé","watch"],["me","Toi","user"]];
   const ti=Math.max(0,tabs.findIndex(x=>x[0]===t));
-  return `<nav class="tabs" aria-label="Navigation"><div class="in" style="--ti:${ti}"><span class="pill" aria-hidden="true"></span>${tabs.map(([k,l,i])=>`<button class="tab ${t===k?"on":""}" data-tab="${k}" aria-current="${t===k?"page":"false"}">${icon(i,24)}<span>${l}</span></button>`).join("")}</div></nav>`;
+  return `<nav class="tabs ${t==="today"?"":"solo"}" aria-label="Navigation"><div class="in" style="--ti:${ti}"><span class="pill" aria-hidden="true"></span>${tabs.map(([k,l,i])=>`<button class="tab ${t===k?"on":""}" data-tab="${k}" aria-current="${t===k?"page":"false"}">${icon(i,24)}<span>${l}</span></button>`).join("")}</div></nav>`;
 }
 function ringSVG(prog, onGlass){
   const r=24, c=2*Math.PI*r, off=c*(1-Math.max(.003,Math.min(1,prog)));
   const bg="var(--fill)", fg=onGlass?"var(--ok)":"var(--air)";
   return `<svg viewBox="0 0 56 56"><circle cx="28" cy="28" r="${r}" fill="none" stroke="${bg}" stroke-width="6"/><circle class="pg" cx="28" cy="28" r="${r}" fill="none" stroke="${fg}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>`;
 }
+/* Hauteur de la scène d'accueil. Si l'écran laisse la place de montrer la carte « Économisé » en entier
+   au-dessus des boutons, la scène garde sa taille ; sinon elle remplit le premier écran, pour que rien
+   ne soit coupé à moitié. Mesuré sur la petite hauteur (svh), qui ne bouge pas quand Safari replie sa barre. */
+function fitScene(){
+  const pr=document.createElement("div");
+  pr.style.cssText="position:fixed;visibility:hidden;top:0;left:0;width:0;height:100svh;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box";
+  document.body.appendChild(pr);
+  const cs=getComputedStyle(pr), vh=pr.offsetHeight||innerHeight, st=parseFloat(cs.paddingTop)||0, sb=parseFloat(cs.paddingBottom)||0;
+  pr.remove();
+  const dockTop=vh-sb-64-20-56, natural=st+460, room=dockTop-(natural+18);
+  document.documentElement.style.setProperty("--scene-h", (room>=132 ? natural : Math.max(st+400, dockTop-14))+"px");
+}
+fitScene(); addEventListener("resize",fitScene);
 let HERO_ENTER=false;
 const REDUCED=()=>matchMedia("(prefers-reduced-motion: reduce)").matches;
 const set=(id,txt)=>{ const el=document.getElementById(id); if(el && el.textContent!==txt) el.textContent=txt; };
@@ -409,6 +475,7 @@ function viewToday(){
   return `
   <main class="today">
     <section class="scene" id="sky">${SUN}<div class="smoke s1"></div><div class="smoke s2"></div><div class="smoke s3"></div><div class="smoke s4"></div>${CLOUDS}
+      <button class="scene-add" data-act="journal">${icon("plus",16)} Noter</button>
       <header class="hero ${HERO_ENTER?"enter":""}" id="hero"></header>${HILLS}</section>
     <div class="stagger">
       <section class="glass tone-sun" ${I()} aria-label="Argent économisé">
@@ -420,7 +487,7 @@ function viewToday(){
         <section class="glass tone-leaf"><div class="gh">${icon("nocig")} ${w.Many} évitées</div><div class="gmid tnum" id="t-cigs"></div><div class="gsub" id="t-packs"></div></section>
         <section class="glass tone-coral"><div class="gh">${icon("heart")} Vie regagnée</div><div class="gmid" id="t-life"></div><div class="gsub">estimation, ~${MIN_PER_CIG_LIFE} min par ${w.one}</div></section>
       </div>
-      ${S.health.baseline && new Date().getHours()>=18 && !S.health.entries[dayKey()]?`<section class="glass tone-leaf" ${I()} aria-label="Mesures du soir"><div class="gh">${icon("heart")} Tes mesures du soir</div>
+      ${Object.keys(S.health.entries).length && new Date().getHours()>=18 && !S.health.entries[dayKey()]?`<section class="glass tone-leaf" ${I()} aria-label="Mesures du soir"><div class="gh">${icon("heart")} Tes mesures du soir</div>
         <div class="gsub" style="margin:4px 0 12px">Ta montre les a copiées à 18 h. Un toucher pour les ajouter.</div>
         <button class="btn air" data-act="hpaste">${icon("download",20)} Coller les mesures</button>
         <a class="btn soft" style="margin-top:8px" href="${SYNC_URL}">${icon("heart",20)} Relire ma montre</a></section>`:""}
@@ -443,7 +510,7 @@ function viewToday(){
   </main>
   <div class="dock"><div class="in">
     <button class="btn ember" data-act="sos">${icon("flame",20)} J'ai envie de fumer</button>
-    <button class="btn note" data-act="journal" aria-label="Noter dans le journal">${icon("plus",22)}</button>
+    ${s.before?"":`<button class="btn slip" data-act="slip">J'ai craqué</button>`}
   </div></div>`;
 }
 function rwLine(r,s){
@@ -472,7 +539,7 @@ function tick(){
       <div class="big" style="font-size:64px;margin-top:10px">${dur(s.quit-Date.now())}</div>
       <div class="sub">Prépare-toi : jette les briquets, préviens tes proches.</div>`;
   }else{
-    const d=Math.floor(s.days), n=reached(s.el);
+    const u=bigUnit(s.el), d=u.n, n=reached(s.el);
     if(!hero.dataset.ready){
       hero.dataset.ready=1;
       hero.innerHTML=`<div class="who">${name?esc(name):"Sans fumer"}</div>
@@ -483,8 +550,8 @@ function tick(){
       if(HERO_ENTER) countUp(document.getElementById("t-days"),d); else { const e=document.getElementById("t-days"); e.textContent=String(d); e.dataset.done=1; }
     }
     const de=document.getElementById("t-days"); if(de&&de.dataset.done) set("t-days",String(d));
-    { const du=document.getElementById("t-du"), txt=`${plural(d,"jour","jours")} <b>sans fumer</b>`; if(du && du.innerHTML!==txt) du.innerHTML=txt; }
-    set("t-clock",clock(s.el));
+    { const du=document.getElementById("t-du"), txt=`${u.word} <b>sans fumer</b>`; if(du && du.innerHTML!==txt) du.innerHTML=txt; }
+    set("t-clock",u.rest);
     set("t-steps",`${n} ${plural(n,"étape","étapes")} du corps sur ${MILESTONES.length}`+(S.attempts.length?`, record : ${dur(bestStreak())}`:""));
     const tg=document.getElementById("trees"); if(tg && tg.dataset.n!==String(n)){ tg.dataset.n=String(n); tg.innerHTML=treesSVG(n); }
   }
@@ -509,20 +576,23 @@ function tick(){
   });
 }
 function healthTeaser(attr=""){
-  const b=S.health.baseline, keys=Object.keys(S.health.entries).sort();
+  const b=healthRef(), keys=Object.keys(S.health.entries).sort();
   if(!b||keys.length<2) return "";
   const l=S.health.entries[keys[keys.length-1]];
   if(b.rhr==null||l.rhr==null) return "";
   const d=l.rhr-b.rhr; if(d>-0.5) return "";
   return `<button class="glass tone-leaf" ${attr} data-goto="health"><div class="gh">${icon("watch")} Apple Watch <span class="go">Santé${icon("chevron",13)}</span></div>
-    <div class="row"><div class="gmid">−${dec(-d,0)}<span style="font-size:18px"> bpm</span></div><div class="gtext grow" style="font-size:15px">Ton pouls au repos a baissé depuis ta première mesure.</div></div></button>`;
+    <div class="row"><div class="gmid">−${dec(-d,0)}<span style="font-size:18px"> bpm</span></div><div class="gtext grow" style="font-size:15px">Ton pouls au repos a baissé depuis ton départ.</div></div></button>`;
 }
 
 /* ---------- Stats ---------- */
 function viewStats(){
-  const s=stats(), range=S.ui.range;
-  const now=Date.now();
-  const from = range==="all" ? s.quit : Math.max(s.quit, startOfDay(now)-(+range-1)*DAY);
+  const s=stats(), past=S.attempts.length>0;
+  const range = S.ui.range==="full"&&!past ? "all" : S.ui.range;
+  const now=Date.now(), full=range==="full";
+  /* « Tout » remonte avant le dernier craquage ; les autres périodes s'arrêtent à la date d'arrêt. */
+  const from = full ? Math.min(s.quit, ...S.attempts.map(a=>a.start), ...S.log.map(e=>e.at))
+    : range==="all" ? s.quit : Math.max(s.quit, startOfDay(now)-(+range-1)*DAY);
   const L=S.log.filter(e=>e.at>=from);
   const env=L.filter(e=>e.type==="envie"), ok=env.filter(e=>e.ok).length;
   const cig=L.filter(e=>e.type==="cigarette").reduce((a,e)=>a+(e.n||1),0);
@@ -532,27 +602,30 @@ function viewStats(){
 
   let h=`<div class="page"><div class="head"><h1 class="h1">Tes chiffres</h1>
     <p class="lead">Calculés à partir de ton journal et de tes habitudes d'avant.</p></div>
-    <div class="seg full" role="tablist">${[["7","7 jours"],["30","30 jours"],["all","Depuis l'arrêt"]].map(([k,l])=>`<button class="${range===k?"on":""}" data-act="range" data-v="${k}">${l}</button>`).join("")}</div>`;
+    <div class="seg full ${past?"tight":""}" role="tablist">${[["7","7 jours"],["30","30 jours"],["all","Depuis l'arrêt"]].concat(past?[["full","Tout"]]:[]).map(([k,l])=>`<button class="${range===k?"on":""}" data-act="range" data-v="${k}">${l}</button>`).join("")}</div>`;
 
   /* Bilan */
-  h+=`<section class="section"><div class="st"><h2 class="h2">Bilan depuis l'arrêt</h2>${S.attempts.length?`<span class="meta">Meilleure série : ${dur(bestStreak())}</span>`:""}</div><div class="kpis">
+  h+=`<section class="section"><div class="st"><h2 class="h2">Bilan depuis l'arrêt</h2></div><div class="kpis">
     <div class="kpi"><div class="meta">Économisé</div><div class="v">${eur(s.money,true)}</div><div class="meta">${eur(s.perDayMoney)} par jour</div></div>
     <div class="kpi"><div class="meta">${W().Many} évitées</div><div class="v">${int(s.avoided)}</div><div class="meta">${dec(s.packs,1)} ${W().packs}</div></div>
     <div class="kpi"><div class="meta">Temps pas passé à fumer</div><div class="v">${dur(s.smokeTime)}</div><div class="meta">~${MIN_PER_CIG_SMOKE} min par ${W().one}</div></div>
     <div class="kpi"><div class="meta">Vie regagnée</div><div class="v">${dur(s.life)}</div><div class="meta">estimation, ~${MIN_PER_CIG_LIFE} min par ${W().one}</div></div>
-  </div>${s.smoked?`<p class="meta" style="padding:10px 6px 0;margin:0">${s.smoked} ${plural(s.smoked,W().one+" fumée a été déduite",W().many+" fumées ont été déduites")} du calcul.</p>`:""}</section>`;
+  </div>${seriesHTML()}</section>`;
 
   /* Envies */
+  const viaSos=env.filter(e=>e.sos!=null).length;
   h+=`<section class="section"><div class="st"><h2 class="h2">Tes envies</h2><button class="linkbtn" data-act="journal">Noter</button></div>`;
   if(!env.length && !cig){
-    h+=`<div class="block empty"><div class="h3">Aucune envie notée sur la période</div>
-      <p class="small" style="margin:6px 0 16px">Chaque fois que tu passes par le SOS ou que tu notes une envie, elle apparaît ici : heures à risque, déclencheurs, évolution.</p>
+    h+=`<div class="block empty"><div class="h3">Aucune envie notée ${range==="all"?"depuis l'arrêt":"sur la période"}</div>
+      <p class="small" style="margin:6px 0 16px">${past&&!full?"Tes envies d'avant le dernier craquage sont toujours là : touche « Tout » en haut pour revoir tes heures à risque et tes déclencheurs."
+        :"Chaque fois que tu passes par le SOS ou que tu notes une envie, elle apparaît ici : heures à risque, déclencheurs, évolution."}</p>
       <button class="btn air" data-act="journal">${icon("plus",20)} Noter une envie</button></div></section>`;
   }else{
     h+=`<div class="kpis">
       <div class="kpi"><div class="meta">Envies notées</div><div class="v">${env.length}</div><div class="meta">${perDayTxt(env.length,from)}</div></div>
       <div class="kpi"><div class="meta">Vaincues</div><div class="v">${env.length?Math.round(ok/env.length*100):0} %</div><div class="meta">${ok} sur ${env.length}</div></div>
-      <div class="kpi"><div class="meta">${W().Many} fumées</div><div class="v">${cig}</div><div class="meta">${cig?"sur la période":"aucune, bravo"}</div></div>
+      ${full?`<div class="kpi"><div class="meta">${W().Many} fumées</div><div class="v">${cig}</div><div class="meta">depuis le tout début</div></div>`
+        :`<div class="kpi"><div class="meta">Passées avec le SOS</div><div class="v">${viaSos}</div><div class="meta">${viaSos?"le coach a servi":"il est là quand il faut"}</div></div>`}
       <div class="kpi"><div class="meta">Intensité moyenne</div><div class="v">${avgInt?dec(avgInt,1):"—"}<span class="meta"> / 5</span></div><div class="meta">${intTrend(env)}</div></div>
     </div>`;
     const ins=insights(env,L,from);
@@ -565,12 +638,13 @@ function viewStats(){
     buckets.forEach(b=>{ b.a=0; b.b=0; });
     L.forEach(e=>{ const b=buckets.find(x=>e.at>=x.t0&&e.at<x.t1); if(!b) return;
       if(e.type==="envie"&&e.ok) b.a++; if(e.type==="cigarette") b.b+=(e.n||1); });
-    buckets.forEach(b=>b.tip=`<b>${b.label}</b><br>${b.a} ${plural(b.a,"envie vaincue","envies vaincues")}<br>${b.b} ${plural(b.b,W().one+" fumée",W().many+" fumées")}`);
+    buckets.forEach(b=>b.tip=`<b>${b.label}</b><br>${b.a} ${plural(b.a,"envie vaincue","envies vaincues")}`+(full?`<br>${b.b} ${plural(b.b,W().one+" fumée",W().many+" fumées")}`:""));
     const every=Math.ceil(buckets.length/7);
     h+=`<div class="block" style="margin-top:10px"><div class="h3">${useWeeks?"Par semaine":"Par jour"}</div>
-      <div class="legend"><span><i style="background:var(--air)"></i>Envies vaincues</span><span><i style="background:var(--ember)"></i>${W().Many} fumées</span></div>
+      <div class="legend"><span><i style="background:var(--air)"></i>Envies vaincues</span>${full?`<span><i style="background:var(--ember)"></i>${W().Many} fumées</span>`:""}</div>
       ${columns({data:buckets.map((b,i)=>({label:b.short, axis:i%every===0?b.short:"", a:b.a, b:b.b, tip:b.tip})), height:150})}
-      ${tableHTML([useWeeks?"Semaine":"Jour","Vaincues","Fumées"], buckets.filter(b=>b.a||b.b).map(b=>[b.label,b.a,b.b]))}</div>`;
+      ${full?tableHTML([useWeeks?"Semaine":"Jour","Vaincues","Fumées"], buckets.filter(b=>b.a||b.b).map(b=>[b.label,b.a,b.b]))
+            :tableHTML([useWeeks?"Semaine":"Jour","Vaincues"], buckets.filter(b=>b.a).map(b=>[b.label,b.a]))}</div>`;
 
     /* Heures */
     const hours=Array.from({length:24},(_,i)=>({i,n:0}));
@@ -633,6 +707,18 @@ function viewStats(){
   return h;
 }
 function perDayTxt(n,from){ const d=Math.max(1,(Date.now()-from)/DAY); return dec(n/d,1)+" par jour"; }
+/* Tes séries : celle en cours et les précédentes, pour que le record reste visible après un craquage. */
+function seriesHTML(){
+  if(!S.attempts.length) return "";
+  const cur=Math.max(0,Date.now()-quitT()), best=bestStreak();
+  const rows=[{len:cur, label:"En cours", sub:"depuis le "+fDate(quitT())+" à "+fTime(quitT()), on:true}]
+    .concat([...S.attempts].sort((a,b)=>b.end-a.end).slice(0,4).map(a=>({len:a.end-a.start, label:dur(a.end-a.start), sub:"du "+fDate(a.start)+" au "+fDate(a.end)})));
+  rows[0].label="En cours, "+dur(cur);
+  return `<div class="block" style="margin-top:12px"><div class="row"><div class="h3 grow">Tes séries</div><span class="meta">Record : ${dur(best)}</span></div>
+    ${rows.map(r=>`<div style="margin-top:14px"><div class="row"><div class="grow small" style="font-weight:700">${r.label}${!r.on&&r.len>=best?` <span class="meta" style="color:var(--sun);font-weight:700">record</span>`:""}</div><div class="meta">${r.sub}</div></div>
+      <div class="bar ${r.on?"":"sun"}" style="margin-top:6px"><i style="width:${Math.max(2,r.len/best*100)}%"></i></div></div>`).join("")}
+    ${S.attempts.length>4?`<p class="meta" style="margin:12px 0 0">${S.attempts.length} séries avant celle-ci.</p>`:""}</div>`;
+}
 function intTrend(env){
   const v=env.filter(e=>e.intensity).sort((a,b)=>a.at-b.at); if(v.length<4) return "sur 5";
   const h=Math.floor(v.length/2), a=v.slice(0,h).reduce((s,e)=>s+e.intensity,0)/h, b=v.slice(h).reduce((s,e)=>s+e.intensity,0)/(v.length-h);
@@ -644,8 +730,10 @@ function peakWindow(hours){
   return {a:bi, b:bi+3, n:best};
 }
 function dayBuckets(from,now){
-  const out=[]; for(let t=startOfDay(from); t<=now; t+=DAY){ const t1=startOfDay(t+DAY*1.5);
-    out.push({t0:t, t1, label:fDate(t), short:new Date(t).getDate()+""}); if(out.length>400) break; }
+  /* Jour de calendrier par jour de calendrier : un jour de 23 h ou 25 h (changement d'heure) ne décale rien. */
+  const out=[], d=new Date(startOfDay(from));
+  while(d.getTime()<=now && out.length<=400){ const t0=d.getTime(); d.setDate(d.getDate()+1);
+    out.push({t0, t1:d.getTime(), label:fDate(t0), short:new Date(t0).getDate()+""}); }
   return out;
 }
 function weekBuckets(days){
@@ -693,8 +781,12 @@ function viewProgress(){
           ${cur?`<div class="bar" style="margin-top:10px;height:6px"><i style="width:${pr*100}%"></i></div><div class="meta" style="margin-top:6px">encore ${dur(m.after-el)}</div>`:""}</div></div>`;}).join("")}</div>`;
   }else if(tab==="badges"){
     const bs=badgeState(), n=bs.filter(b=>b.got).length;
-    h+=`<div style="padding:16px 6px 4px"><div class="display" style="font-size:44px;font-weight:720;line-height:1">${n}<span class="ash" style="font-size:22px"> / ${bs.length}</span></div>
-      <div class="bar" style="margin-top:12px"><i style="width:${n/bs.length*100}%"></i></div></div>`;
+    const nextB=bs.filter(b=>b.eta!=null).sort((a,b)=>a.eta-b.eta)[0];
+    h+=`<div style="padding:16px 6px 4px"><div class="display" style="font-size:44px;font-weight:700;line-height:1">${n}<span class="ash" style="font-size:22px"> / ${bs.length}</span></div>
+      <div class="bar" style="margin-top:12px"><i style="width:${n/bs.length*100}%"></i></div></div>
+      ${nextB?`<div class="block" style="margin-top:14px"><div class="row"><div class="badge ${nextB.kind}"><div class="medal" style="width:52px;height:52px">${icon(nextB.icon,22)}</div></div>
+        <div class="grow"><div class="meta">Le prochain</div><div class="h3">${esc(nextB.title)} ${esc(nextB.sub)}</div><div class="small ink2">dans ${dur(nextB.eta)}</div></div></div>
+        <div class="bar" style="margin-top:12px"><i style="width:${nextB.prog*100}%"></i></div></div>`:""}`;
     [["time","Temps sans fumer"],["money","Argent économisé"],["cigs",W().Many+" évitées"],["resisted","Envies vaincues"],["missions","Programme"],["sync","Apple Watch"]].forEach(([k,l])=>{
       const list=bs.filter(b=>b.kind===k);
       h+=`<section class="section"><div class="st"><h2 class="h2">${l}</h2><span class="meta">${list.filter(b=>b.got).length} / ${list.length}</span></div>
@@ -729,10 +821,10 @@ function shortcutGuide(){
     <li style="margin:8px 0"><a href="Souffle%20Sant%C3%A9.shortcut" download><b>Installe le raccourci « Souffle Santé »</b></a>, puis touche <b>Ajouter le raccourci</b>.</li>
     <li style="margin:8px 0">Touche <b>1. Lire ma montre</b> et autorise l'accès à Santé, puis reviens ici et touche <b>2. Coller les mesures</b>.</li>
     <li style="margin:8px 0">Chaque soir : Raccourcis › <b>Automatisation</b> › <b>＋</b> › <b>Heure de la journée</b>, 18:00, Quotidien, <b>Exécuter immédiatement</b>, raccourci <b>Souffle Santé</b>. Le soir, Souffle te propose de coller sur l'accueil.</li>
-    <li style="margin:8px 0">Changement d'appareil ou d'icône : <b>Toi › Copier toutes mes données</b>, puis dans la nouvelle Souffle <b>Toi › Coller mes données</b>.</li></ol>`;
+    <li style="margin:8px 0">Changement d'appareil ou d'icône : <b>Toi › Copier</b>, puis dans la nouvelle Souffle <b>Toi › Coller</b>.</li></ol>`;
 }
 function viewHealth(){
-  const keys=Object.keys(S.health.entries).sort(), b=S.health.baseline;
+  const keys=Object.keys(S.health.entries).sort(), b=healthRef();
   let h=`<div class="page"><div class="head"><h1 class="h1">Santé</h1>`;
   if(!keys.length){
     return h+`<p class="lead">Ton corps change avant que tu le sentes. Relie ton Apple Watch : un raccourci lit tes mesures et les envoie ici.</p></div>
@@ -748,13 +840,13 @@ function viewHealth(){
     if(ref!=null && ser.length>1){ const d=now-ref; comp++; const good=Math.abs(d)<1e-9?null:(m.lower?d<0:d>0); if(good) impr++;
       const col=good===true?"var(--ok)":good===false?"var(--ember)":"var(--ash)";
       const pct=ref?Math.abs(d/ref*100):0;
-      badge=`<span class="small" style="font-weight:650;color:${col}">${d>0?"+":"−"}${dec(Math.abs(d),m.dec)} ${m.unit} (${dec(pct,0)} %)</span>`; }
+      badge=Math.abs(d)<.5*Math.pow(10,-m.dec) ? "" : `<span class="small" style="font-weight:650;color:${col}">${d>0?"+":"−"}${dec(Math.abs(d),m.dec)} ${m.unit} (${dec(pct,0)} %)</span>`; }
     const vals=ser.map(x=>x.v), mn=Math.min(...vals), mx=Math.max(...vals);
-    return `<div class="block"><div class="row"><div class="chip-ic air">${icon(m.icon,20)}</div><div class="grow"><div class="h3">${m.title}</div>${badge||`<span class="meta">Première mesure</span>`}</div></div>
+    return `<div class="block"><div class="row"><div class="chip-ic air">${icon(m.icon,20)}</div><div class="grow"><div class="h3">${m.title}</div>${badge||`<span class="meta">${ser.length>1?"Comme au départ":"Première mesure"}</span>`}</div></div>
       <div class="row" style="margin-top:14px;gap:22px">
-        <div><div class="meta">1re mesure</div><div class="display" style="font-size:26px;font-weight:650;color:var(--ink2)">${dec(ref,m.dec)}</div></div>
+        <div><div class="meta">Au départ</div><div class="display" style="font-size:26px;font-weight:650;color:var(--ink2)">${dec(ref,m.dec)}</div></div>
         <div><div class="meta">Maintenant</div><div class="display" style="font-size:26px;font-weight:700">${dec(now,m.dec)} <span class="meta">${m.unit}</span></div></div></div>
-      ${ser.length>1?line({points:ser.map(x=>({t:x.t,v:x.v,tip:`<b>${fDate(x.t)}</b><br>${dec(x.v,m.dec)} ${m.unit}`})), ref, refLabel:"1re mesure", height:140, yFmt:v=>dec(v,m.dec), xFmt:fDate})
+      ${ser.length>1?line({points:ser.map(x=>({t:x.t,v:x.v,tip:`<b>${fDate(x.t)}</b><br>${dec(x.v,m.dec)} ${m.unit}`})), ref, refLabel:"Départ", height:140, yFmt:v=>dec(v,m.dec), xFmt:fDate})
         :`<p class="meta" style="margin:12px 0 0">La courbe apparaît dès ta deuxième journée.</p>`}
       ${ser.length>2?`<p class="meta" style="margin:8px 0 0">Min ${dec(mn,m.dec)}, max ${dec(mx,m.dec)} sur ${ser.length} jours.</p>`:""}
       <p class="small ink2" style="margin:10px 0 0">${m.why}</p>
@@ -763,7 +855,7 @@ function viewHealth(){
   h+= comp&&impr ? `<p class="lead" style="color:var(--ok);font-weight:600">${impr} ${plural(impr,"indicateur va","indicateurs vont")} déjà dans le bon sens.</p>`
     : `<p class="lead">Moyennes sur 7 jours envoyées par ton Raccourci. Reviens chaque jour : la courbe se construit.</p>`;
   h+=`<p class="meta" style="margin:6px 0 0">Mis à jour ${fDateLong(last.at)} à ${fTime(last.at)}</p><div style="margin-top:12px">${syncButton()}</div></div>${cards}
-    <p class="meta" style="padding:12px 6px">Comparaison avec ta première mesure (${b?fDate(new Date(b.day+"T12:00")):"—"}). Ce sont des tendances, pas un diagnostic.</p>
+    <p class="meta" style="padding:12px 6px">Comparaison avec ta mesure de départ (${b?fDate(new Date(b.day+"T12:00")):"—"})${S.attempts.length?", celle de ton dernier nouveau départ. Les mesures d'avant restent sur les courbes":""}. Ce sont des tendances, pas un diagnostic.</p>
     <details class="block"><summary class="h3" style="cursor:pointer">Revoir la mise en place du Raccourci</summary>${shortcutGuide()}</details></div>`;
   return h;
 }
@@ -775,6 +867,8 @@ function viewMe(){
   <div class="block">
     <label class="field" style="margin-top:0"><span>Prénom</span><input class="inp" data-f="firstName" value="${esc(p.firstName)}" autocomplete="given-name"></label>
     <label class="field"><span>Dernière cigarette</span><input class="inp" type="datetime-local" data-f="quitDate" value="${toLocalInput(new Date(p.quitDate))}"></label>
+    <p class="meta" style="margin:10px 2px 0">Ce champ sert à corriger une date. Si tu as fumé depuis, passe par « J'ai craqué » : tout repart de zéro et ton record est gardé.</p>
+    <button class="btn line" style="margin-top:12px" data-act="slip">J'ai craqué</button>
   </div>
   <section class="section"><div class="st"><h2 class="h2">Tes habitudes d'avant</h2></div><div class="block">
     ${habitsHTML(p,"me")}
@@ -797,14 +891,16 @@ function viewMe(){
     <p class="small ink2" style="margin:12px 0 0">Des tabacologues gratuits par téléphone. Les substituts nicotiniques sont remboursés sur prescription (médecin, infirmier, sage-femme…) : avec, les chances de réussir sont nettement meilleures.</p>
   </div></section>
   <section class="section"><div class="st"><h2 class="h2">Tes données</h2></div><div class="block">
-    <p class="small ink2" style="margin:0 0 12px">Tout est stocké dans Safari sur ce téléphone. Fais une sauvegarde de temps en temps.</p>
-    <button class="btn soft" data-act="copyall">${icon("share",20)} Copier toutes mes données</button>
-    <button class="btn soft" style="margin-top:10px" data-act="pasteall">${icon("download",20)} Coller mes données</button>
-    <button class="btn soft" style="margin-top:10px" data-act="export">${icon("download",20)} Exporter une sauvegarde</button>
-    <label class="btn soft" style="margin-top:10px">${icon("upload",20)} Restaurer une sauvegarde<input type="file" accept="application/json,.json" id="importfile" class="hide"></label>
-    <button class="btn line" style="margin-top:10px" data-act="restart">Recommencer à partir de maintenant</button>
-    <button class="btn line" style="margin-top:10px;color:var(--ember)" data-act="erase">Tout effacer</button>
-  </div></section>
+    <div class="h3">Sauvegarde</div>
+    <p class="small ink2" style="margin:4px 0 12px">Tout est stocké dans Safari sur ce téléphone. Garde une copie de temps en temps.</p>
+    <div class="pair"><button class="btn soft" data-act="export">${icon("download",20)} Exporter</button>
+      <label class="btn soft">${icon("upload",20)} Restaurer<input type="file" accept="application/json,.json" id="importfile" class="hide"></label></div>
+    <div class="h3" style="margin-top:22px">Changer d'appareil ou d'icône</div>
+    <p class="small ink2" style="margin:4px 0 12px">Copie ici, puis colle dans l'autre Souffle.</p>
+    <div class="pair"><button class="btn soft" data-act="copyall">${icon("share",20)} Copier</button>
+      <button class="btn soft" data-act="pasteall">${icon("download",20)} Coller</button></div>
+  </div>
+  <button class="btn line" style="margin-top:12px;color:var(--ember)" data-act="erase">Tout effacer</button></section>
   <p class="meta" style="padding:18px 6px 0">Étapes du corps : OMS et Tabac Info Service. Vie regagnée : estimation d'environ 20 minutes par cigarette (University College London, 2024). Souffle ne remplace pas un avis médical.</p>
   </div>`;
 }
@@ -836,37 +932,137 @@ function openJournal(preset){
   J={type:"envie", ok:true, intensity:3, trigger:null, n:1, sub:"gomme", note:"", at:null, ...(preset||{})};
   renderJournal();
 }
+/* Garde ce qui est déjà saisi (note, date) avant de redessiner la feuille. */
+function jSync(){
+  if(!J) return;
+  const n=document.getElementById("jnote"), a=document.getElementById("jat");
+  if(n) J.note=n.value;
+  if(a && a.value && a.value!==a.dataset.init) J.at=new Date(a.value).getTime();
+}
+/* Feuille modale : glisse à l'ouverture, puis se met à jour sur place sans rejouer l'animation ni perdre le défilement. */
+function sheet(id, html, top){
+  let el=document.getElementById(id);
+  if(!el){ el=document.createElement("div"); el.id=id; el.className="modal"+(top?" top":""); el.innerHTML=`<div class="panel" role="dialog"></div>`; document.body.appendChild(el); }
+  const p=el.firstElementChild, y=p.scrollTop; p.innerHTML=html; p.scrollTop=y;
+  return el;
+}
 function renderJournal(){
-  let el=document.getElementById("jmodal");
-  if(!el){ el=document.createElement("div"); el.id="jmodal"; el.className="modal"; document.body.appendChild(el); }
-  const t=J.type;
-  el.innerHTML=`<div class="panel" role="dialog" aria-label="Noter dans le journal"><div class="grab"></div>
+  const t=J.type, slip=t==="cigarette"||(t==="envie"&&!J.ok), atv=toLocalInput(J.at?new Date(J.at):new Date());
+  sheet("jmodal", `<div class="grab"></div>
     <div class="row" style="margin-bottom:14px"><h2 class="h2 grow">Noter</h2><button class="icon-btn" data-act="jclose" aria-label="Fermer">${icon("x",20)}</button></div>
     <div class="seg full">${[["envie","Une envie"],["cigarette","Une "+W().one],["substitut","Un substitut"]].map(([k,l])=>`<button class="${t===k?"on":""}" data-act="jtype" data-v="${k}">${l}</button>`).join("")}</div>
     ${t==="envie"?`
       <div class="field"><span>Intensité</span><div class="scale">${[1,2,3,4,5].map(i=>`<button class="${J.intensity===i?"on":""}" data-act="jint" data-v="${i}">${i}</button>`).join("")}</div></div>
       <div class="field"><span>Et alors ?</span><div class="seg full"><button class="${J.ok?"on":""}" data-act="jok" data-v="1">Je n'ai pas fumé</button><button class="${!J.ok?"on":""}" data-act="jok" data-v="0">J'ai fumé</button></div></div>`:""}
-    ${t==="cigarette"?`<div class="field"><span>Combien</span><div class="stepper"><b>${J.n}</b><div class="pm"><button data-act="jn" data-d="-1">−</button><button data-act="jn" data-d="1">+</button></div></div></div>
-      <p class="small ink2" style="margin:10px 2px 0">Ton compteur, les étapes du corps, tes trophées et ton programme repartiront de zéro. Ton journal et ta meilleure série sont gardés.</p>`:""}
+    ${t==="cigarette"?`<div class="field"><span>Combien</span><div class="stepper"><b>${J.n}</b><div class="pm"><button data-act="jn" data-d="-1" aria-label="Moins">−</button><button data-act="jn" data-d="1" aria-label="Plus">+</button></div></div></div>`:""}
     ${t==="substitut"?`<div class="field"><span>Lequel</span><div class="chips">${SUBSTITUTES.map(([k,l])=>`<button class="chip ${J.sub===k?"on":""}" data-act="jsub" data-v="${k}">${l}</button>`).join("")}</div></div>`:""}
     ${t!=="substitut"?`<div class="field"><span>Déclencheur</span><div class="chips">${TRIGGERS.map(([k,l])=>`<button class="chip ${J.trigger===k?"on":""}" data-act="jtrig" data-v="${k}">${l}</button>`).join("")}</div></div>`:""}
     <label class="field"><span>Note (facultatif)</span><textarea class="inp" id="jnote" rows="2" placeholder="Où tu étais, ce que tu ressentais…">${esc(J.note)}</textarea></label>
-    <label class="field"><span>Quand</span><input class="inp" type="datetime-local" id="jat" value="${toLocalInput(J.at?new Date(J.at):new Date())}"></label>
-    <button class="btn air" style="margin-top:18px" data-act="jsave">Enregistrer</button></div>`;
+    <label class="field"><span>Quand</span><input class="inp" type="datetime-local" id="jat" value="${atv}" data-init="${J.at?"":atv}" max="${toLocalInput(new Date())}"></label>
+    ${slip&&S.profile&&(J.at||Date.now())>=quitT()?resetNote():""}
+    <button class="btn ${slip?"ember":"air"}" style="margin-top:18px" data-act="jsave">${slip?"Enregistrer et repartir de zéro":"Enregistrer"}</button>`);
+}
+/* Ce que change une cigarette fumée, dit clairement avant de valider. */
+function resetNote(){
+  return `<div class="consq"><div><b>Repart de zéro</b>Compteur, argent, ${W().many} évitées, étapes du corps, trophées, programme.</div>
+    <div><b>Tu gardes</b>Ton journal, ton record (${dur(bestStreak())}), tes raisons, tes objectifs et tes mesures de montre.</div></div>`;
 }
 function closeJournal(){ const el=document.getElementById("jmodal"); if(el) el.remove(); J=null; }
 function saveJournal(){
-  const note=(document.getElementById("jnote")||{}).value||"";
-  const atv=(document.getElementById("jat")||{}).value;
-  const at=atv?new Date(atv).getTime():Date.now();
-  const base={id:uid(), at, note:note.trim()||undefined};
-  let didReset=false;
+  jSync();
+  const at=Math.min(J.at||Date.now(), Date.now()), note=(J.note||"").trim()||undefined;
+  const base={id:uid(), at, note};
+  let slip=null;
   if(J.type==="envie"){
     S.log.push({...base, type:"envie", ok:J.ok, intensity:J.intensity, trigger:J.trigger||undefined});
-    if(!J.ok){ const c={id:uid(), at, type:"cigarette", n:1, trigger:J.trigger||undefined}; S.log.push(c); didReset=resetOnSmoke(c); }
-  }else if(J.type==="cigarette"){ const c={...base, type:"cigarette", n:J.n, trigger:J.trigger||undefined}; S.log.push(c); didReset=resetOnSmoke(c); }
+    if(!J.ok) slip=logSlip({at, trigger:J.trigger, link:base.id});
+  }else if(J.type==="cigarette") slip=logSlip({at, n:J.n, trigger:J.trigger, note});
   else S.log.push({...base, type:"substitut", sub:J.sub, n:1});
-  save(); closeJournal(); toast(didReset?"Compteur remis à zéro. On repart.":"Noté dans ton journal"); render(!didReset);
+  save(); closeJournal();
+  if(slip&&slip.did){ render(); showRestart(slip); }
+  else{ toast("Noté dans ton journal"); render(true); }
+}
+
+/* ============================================================
+   « J'ai craqué » : une feuille pour le dire, un écran pour repartir
+   ============================================================ */
+let SL=null, RS=null;
+function openSlip(){
+  if(!S.profile||stats().before) return;
+  SL={past:false, at:null, n:1}; renderSlip();
+}
+function renderSlip(){
+  const a=document.getElementById("slat"); if(a&&a.value) SL.at=new Date(a.value).getTime();
+  sheet("slipmodal", `<div class="grab"></div>
+    <h2 class="h1" style="font-size:28px;line-height:34px">Tu as fumé ?</h2>
+    <p class="lead">Ça arrive à la plupart des gens qui arrêtent. Dis-le franchement, et on repart tout de suite.</p>
+    <div class="field"><span>Quand</span><div class="seg full"><button class="${SL.past?"":"on"}" data-act="slwhen" data-v="0">À l'instant</button><button class="${SL.past?"on":""}" data-act="slwhen" data-v="1">Plus tôt</button></div></div>
+    ${SL.past?`<input class="inp" style="margin-top:10px" type="datetime-local" id="slat" aria-label="Date et heure" value="${toLocalInput(SL.at?new Date(SL.at):new Date())}" min="${toLocalInput(new Date(quitT()))}" max="${toLocalInput(new Date())}">`:""}
+    <div class="field"><span>Combien de ${W().many}</span><div class="stepper"><b>${SL.n}</b><div class="pm"><button data-act="sln" data-d="-1" aria-label="Moins">−</button><button data-act="sln" data-d="1" aria-label="Plus">+</button></div></div></div>
+    ${resetNote()}
+    <button class="btn ember" style="margin-top:18px" data-act="slsave">Oui, j'ai fumé</button>
+    <button class="btn soft" style="margin-top:10px" data-act="slclose">Non, je tiens encore</button>`, true);
+}
+function closeSlip(){ const el=document.getElementById("slipmodal"); if(el) el.remove(); SL=null; }
+function saveSlip(){
+  const a=document.getElementById("slat");
+  const at=Math.min(SL.past&&a&&a.value?new Date(a.value).getTime():Date.now(), Date.now()), n=SL.n;
+  closeSlip();
+  if(SOS&&!SOS.entry){ sosResult(false,{at,n}); return; }
+  if(SOS) closeSOS();
+  afterSlip(logSlip({at,n}));
+}
+function afterSlip(slip){
+  render();
+  if(slip.did) showRestart(slip); else toast("Noté. Ton compteur partait déjà d'après cette heure-là.");
+}
+function showRestart(slip){
+  RS=slip;
+  if(!document.getElementById("restart")){ const el=document.createElement("div"); el.id="restart"; el.className="sos restart"; document.body.appendChild(el); }
+  renderRestart(); buzz(40);
+}
+function renderRestart(){
+  const el=document.getElementById("restart"); if(!el||!RS) return;
+  const c=S.log.find(x=>x.id===RS.id)||{}, tc=c.trigger&&TRIGGER_COACH[c.trigger];
+  const stage=el.querySelector(".stage"), y=stage?stage.scrollTop:0;
+  el.innerHTML=`<div class="stage" style="justify-content:flex-start;padding-top:6vh;overflow:auto">
+      <div class="rs-ic">${icon("wind",38)}</div>
+      <div class="h1" style="color:#fff">On repart.</div>
+      <p class="rs-p">Tu as tenu <b>${dur(RS.lasted)}</b>. ${RS.record?"C'est ton record, et il reste à toi.":`Ton record reste ${dur(RS.best)}.`}</p>
+      <p class="rs-p">Ton compteur est reparti de zéro. Dans ${MILESTONES[0].label}, ton cœur ralentit déjà.</p>
+      <div style="width:100%;max-width:420px;text-align:left;margin-top:26px">
+        <div class="small" style="font-weight:700;margin-bottom:8px">Qu'est-ce qui l'a déclenchée ?</div>
+        <div class="chips">${TRIGGERS.map(([k,l])=>`<button class="chip" style="${c.trigger===k?"background:#fff;color:#16222B":"background:rgba(255,255,255,.18);color:#fff"}" data-act="rstrig" data-v="${k}">${l}</button>`).join("")}</div>
+        ${tc?`<div class="tipcard" style="margin-top:14px"><div class="small" style="font-weight:700;opacity:.85">La prochaine fois</div><p style="margin:6px 0 0">${tc.act}</p></div>`:""}
+        ${heavyCravings()?`<div class="tipcard" style="margin-top:14px"><p style="margin:0">Tes envies sont souvent fortes ces derniers jours. Ce n'est pas un manque de volonté : un tabacologue (39 89, gratuit) ou ton médecin peuvent t'aider avec des substituts bien dosés.</p></div>`:""}
+      </div></div>
+    <button class="btn white" style="margin-top:12px" data-act="rsclose">Repartir</button>
+    <a class="btn glassy" style="margin-top:10px" href="tel:3989">${icon("phone",20)} Parler à un tabacologue, 39 89</a>
+    <button class="ghost" data-act="rsundo">Je n'ai pas fumé, annuler</button>`;
+  el.querySelector(".stage").scrollTop=y;
+}
+function closeRestart(){ RS=null; const el=document.getElementById("restart"); if(el) el.remove(); S.ui.tab="today"; save(); render(); }
+function undoSlip(){
+  const c=RS&&S.log.find(x=>x.id===RS.id);
+  if(c){
+    undoReset(c); S.log=S.log.filter(x=>x.id!==c.id);
+    const e=c.link&&S.log.find(x=>x.id===c.link); if(e) e.ok=true;
+    save(); toast("Annulé. Ton compteur est revenu.");
+  }
+  closeRestart();
+}
+
+/* Question posée dans l'appli plutôt que par une alerte du navigateur. */
+function ask({title, text, ok="Confirmer", cancel="Annuler", danger=false}){
+  return new Promise(res=>{
+    const el=document.createElement("div"); el.className="modal top";
+    el.innerHTML=`<div class="panel" role="alertdialog" aria-label="${esc(title)}"><div class="grab"></div><h2 class="h2">${esc(title)}</h2>
+      ${text?`<p class="lead" style="margin-top:8px">${esc(text)}</p>`:""}
+      <button class="btn ${danger?"ember":"air"}" style="margin-top:20px" data-ask="1">${esc(ok)}</button>
+      <button class="btn soft" style="margin-top:10px" data-ask="0">${esc(cancel)}</button></div>`;
+    el.addEventListener("click",e=>{ const b=e.target.closest("[data-ask]"); if(!b&&e.target!==el) return; el.remove(); res(!!b&&b.dataset.ask==="1"); });
+    document.body.appendChild(el);
+  });
 }
 
 /* ============================================================
@@ -920,9 +1116,8 @@ function renderSOS(){
       <span class="tnum" id="sr" style="font-weight:650;font-size:17px">3:00</span></div>
     <div class="seg full sosmodes" style="margin-top:12px">${[["coach","Coach"],["breath","Respirer"],["surf","Surfer"],["game","Jeu"],["tip","Astuces"]].map(([k,l])=>`<button class="${m===k?"on":""}" data-act="sosmode" data-v="${k}">${l}</button>`).join("")}</div>
     <div class="stage ${m==="coach"?"stage-coach":""}">${stage}</div>
-    ${m==="coach"?`<div class="row" style="justify-content:center;gap:22px"><button class="ghost" style="margin:6px 0 0" data-act="sosok">C'est passé</button><button class="ghost" style="margin:6px 0 0" data-act="sosslip">J'ai fumé</button></div>`
-      :`<button class="btn white" data-act="sosok" id="sok">C'est passé, je n'ai pas fumé</button>
-    <button class="ghost" data-act="sosslip">J'ai fumé</button>`}`;
+    <div class="sos-exit"><button class="btn white" data-act="sosok" id="sok">${SOS.done?"L'envie est passée":"C'est passé"}</button>
+      <button class="btn outline" data-act="slip">J'ai craqué</button></div>`;
   if(m==="game") startGame();
   if(m==="surf") SOS.surf0=performance.now();
   if(m==="coach") renderCoach();
@@ -966,11 +1161,9 @@ function sosResultHTML(){
   return `<div class="top"><span></span><button class="icon-btn" data-act="sosclose" aria-label="Fermer">${icon("x",20)}</button></div>
     <div class="stage" style="justify-content:flex-start;padding-top:6vh;overflow:auto">
       <div style="width:84px;height:84px;border-radius:50%;background:rgba(255,255,255,.22);display:grid;place-items:center;margin-bottom:16px">${icon(e.ok?"check":"wind",40)}</div>
-      <div class="h1" style="color:#fff">${e.ok?"Envie battue.":"Ce n'est pas un échec."}</div>
-      <p style="margin:10px 0 0;font-size:17px;max-width:380px;opacity:.95">${e.ok?`${n} ${plural(n,"envie vaincue","envies vaincues")} depuis l'arrêt. Ton cerveau apprend à chaque fois.`
-        :`Ton compteur repart de zéro. Ta meilleure série : ${dur(bestStreak())}, et elle reste à toi. Repère ce qui a déclenché l'envie, et on repart.`}</p>
-      ${e.intensity&&e.after!=null?`<p class="display" style="margin:14px 0 0;font-size:20px;font-weight:650">Intensité ${e.intensity} → ${e.after}</p>`:""}
-      ${!e.ok&&e.trigger&&TRIGGER_COACH[e.trigger]?`<div class="tipcard" style="margin-top:20px"><div class="small" style="font-weight:650;opacity:.85">La prochaine fois (${(TRIGGER_LABEL[e.trigger]||"").toLowerCase()})</div><p style="margin:6px 0 0">${TRIGGER_COACH[e.trigger].act}</p></div>`:""}
+      <div class="h1" style="color:#fff">Envie battue.</div>
+      <p style="margin:10px 0 0;font-size:17px;max-width:380px;opacity:.95">${n} ${plural(n,"envie vaincue","envies vaincues")} depuis l'arrêt. Ton cerveau apprend à chaque fois.</p>
+      ${e.intensity&&e.after!=null?`<p class="display" style="margin:14px 0 0;font-size:20px;font-weight:650">Intensité ${e.intensity}, puis ${e.after}</p>`:""}
       ${heavyCravings()?`<div class="tipcard" style="margin-top:14px"><p style="margin:0">Tes envies sont souvent fortes ces derniers jours. Ce n'est pas un manque de volonté : un tabacologue (39 89, gratuit) ou ton médecin peuvent t'aider avec des substituts bien dosés.</p></div>`:""}
       <div style="width:100%;max-width:420px;text-align:left;margin-top:26px">
         <div class="small" style="font-weight:600;margin-bottom:8px;opacity:.9">Intensité de l'envie</div>
@@ -978,18 +1171,22 @@ function sosResultHTML(){
         <div class="small" style="font-weight:600;margin:18px 0 8px;opacity:.9">Ce qui l'a déclenchée</div>
         <div class="chips">${TRIGGERS.map(([k,l])=>`<button class="chip" style="${e.trigger===k?"background:#fff;color:#16222B":"background:rgba(255,255,255,.18);color:#fff"}" data-act="strig" data-v="${k}">${l}</button>`).join("")}</div>
       </div></div>
-    ${e.ok?"":`<a class="btn" href="tel:3989" style="background:rgba(255,255,255,.2);color:#fff;margin-bottom:10px">${icon("phone",20)} Parler à un tabacologue, 39 89</a>`}
-    <button class="btn white" data-act="sosclose">Terminer</button>`;
+    <button class="btn white" style="margin-top:12px" data-act="sosclose">Terminer</button>`;
 }
-function sosResult(ok){
-  const at=Date.now(), secs=Math.round((performance.now()-SOS.start)/1000);
+/* opt (quand, combien) vient de la feuille « J'ai craqué ». */
+function sosResult(ok, opt){
+  const now=Date.now(), at=ok?now:Math.min(now,(opt&&opt.at)||now), secs=Math.round((performance.now()-SOS.start)/1000);
   const entry={id:uid(), at, type:"envie", ok, sos:secs};
   const cd=SOS.coach&&SOS.coach.d;
   if(cd){ if(cd.intensity) entry.intensity=cd.intensity; if(cd.after!=null) entry.after=cd.after; if(cd.trigger) entry.trigger=cd.trigger; if(cd.thought) entry.thought=cd.thought; if(cd.intensity) entry.coach=true; }
   S.log.push(entry);
-  if(!ok){ const c={id:uid(), at, type:"cigarette", n:1, link:entry.id, trigger:entry.trigger}; S.log.push(c); resetOnSmoke(c); }
-  save(); SOS.entry=entry; if(SOS.coach){ SOS.coach.dead=true; } cancelAnimationFrame(SOS.raf); if(SOS.game) stopGame();
-  buzz(ok?[30,50,30]:60); renderSOS();
+  if(SOS.coach) SOS.coach.dead=true;
+  if(!ok){
+    const slip=logSlip({at, n:(opt&&opt.n)||1, trigger:entry.trigger, link:entry.id});
+    closeSOS(); afterSlip(slip); return;
+  }
+  save(); SOS.entry=entry; cancelAnimationFrame(SOS.raf); if(SOS.game) stopGame();
+  buzz([30,50,30]); renderSOS();
 }
 function updateSOSEntry(k,v){
   const e=S.log.find(x=>x.id===SOS.entry.id); if(!e) return;
@@ -1001,9 +1198,9 @@ function updateSOSEntry(k,v){
 function newCoach(){ return {msgs:[], choices:null, typing:false, d:{}, round:1, timerEnd:null, timerLen:0, onTimer:null, q:Promise.resolve(), dead:false}; }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 function fill(t){
-  const s=stats(), w=W(), n=resistedCount();
+  const s=stats(), w=W(), n=allCravings().filter(e=>e.ok).length;
   return t.replace(/\{dur\}/g,dur(s.el)).replace(/\{money\}/g,eur(s.money,true)).replace(/\{years\}/g,S.profile.years)
-    .replace(/\{resisted\}/g,`${n} ${plural(n,"envie","envies")}`).replace(/\{one\}/g,w.one).replace(/\{many\}/g,w.many);
+    .replace(/\{resisted\}/g,n?` et ${n} ${plural(n,"envie déjà vaincue","envies déjà vaincues")}`:"").replace(/\{one\}/g,w.one).replace(/\{many\}/g,w.many);
 }
 function alive(C){ return SOS && SOS.coach===C && !C.dead; }
 function cSay(lines){
@@ -1035,16 +1232,18 @@ function renderCoach(){
   ch.innerHTML=(C.choices||[]).map((c,i)=>`<button data-act="cpick" data-i="${i}">${esc(c.label)}</button>`).join("");
   chat.scrollTop=chat.scrollHeight;
 }
+/* Le coach s'appuie sur tout le journal : ce qu'il a appris de toi ne s'efface pas avec un craquage. */
+const allCravings = ()=> S.log.filter(e=>e.type==="envie");
 function topTrigger(){
-  const tr={}; cravings().filter(e=>e.trigger).forEach(e=>tr[e.trigger]=(tr[e.trigger]||0)+1);
+  const tr={}; allCravings().filter(e=>e.trigger).forEach(e=>tr[e.trigger]=(tr[e.trigger]||0)+1);
   const t=Object.entries(tr).sort((a,b)=>b[1]-a[1])[0]; return t&&t[1]>=2?t[0]:null;
 }
 function inPeakHour(){
-  const h=Array.from({length:24},(_,i)=>({i,n:0})); cravings().forEach(e=>h[new Date(e.at).getHours()].n++);
+  const h=Array.from({length:24},(_,i)=>({i,n:0})); allCravings().forEach(e=>h[new Date(e.at).getHours()].n++);
   const p=peakWindow(h), now=new Date().getHours(); return p&&p.n>=4&&now>=p.a&&now<p.b;
 }
 function heavyCravings(){
-  const r=cravings().filter(e=>e.at>Date.now()-7*DAY), ints=r.filter(e=>e.intensity).map(e=>e.intensity);
+  const r=allCravings().filter(e=>e.at>Date.now()-7*DAY), ints=r.filter(e=>e.intensity).map(e=>e.intensity);
   return r.length>=10 && ints.length>=5 && ints.reduce((a,b)=>a+b,0)/ints.length>=3.5;
 }
 const intensityChoices=fn=>[1,2,3,4,5].map(i=>({label:`${i}, ${INTENSITY_LABEL[i].toLowerCase()}`, fn:()=>fn(i)}));
@@ -1090,7 +1289,7 @@ function cReason(ans){
 function cFacts(){
   const s=stats(), w=W(), lines=[];
   if(!s.before) lines.push(`Depuis l'arrêt : ${dur(s.el)} sans fumer, ${eur(s.money,true)} gardés, ${int(s.avoided)} ${w.many} pas fumées.`);
-  const b=S.health.baseline, keys=Object.keys(S.health.entries).sort();
+  const b=healthRef(), keys=Object.keys(S.health.entries).sort();
   if(b&&keys.length>1){ const l=S.health.entries[keys[keys.length-1]]; if(b.rhr!=null&&l.rhr!=null&&l.rhr<b.rhr-.5) lines.push(`Et ta montre le voit : ton pouls au repos a baissé de ${dec(b.rhr-l.rhr,0)} bpm.`); }
   if(lines.length) cSay(lines);
   cThen(cAction);
@@ -1126,8 +1325,8 @@ function cAfter(i2){
     const mins=Math.max(1,Math.round((performance.now()-SOS.start)/60000));
     cSay([`Tu tiens depuis ${mins} minute${mins>1?"s":""}. C'est déjà une victoire.`,
       "Si les envies restent aussi fortes, ce n'est pas un manque de volonté : c'est ton corps qui a besoin d'aide. Un tabacologue (39 89, gratuit) ou ton médecin peuvent t'aider à ajuster des substituts. Ça change vraiment la donne."]);
-    cAsk([{label:"Appeler le 39 89", fn:()=>{ location.href="tel:3989"; cAsk([{label:"J'ai tenu", fn:()=>sosResult(true)},{label:"J'ai fumé", fn:()=>sosResult(false)}]); }},
-      {label:"Je tiens, ça passe", fn:()=>sosResult(true)},{label:"J'ai fumé", fn:()=>sosResult(false)}]);
+    cAsk([{label:"Appeler le 39 89", fn:()=>{ location.href="tel:3989"; cAsk([{label:"J'ai tenu", fn:()=>sosResult(true)}]); }},
+      {label:"Je tiens, ça passe", fn:()=>sosResult(true)}]);
   }
 }
 function cTool(k){
@@ -1177,32 +1376,34 @@ function buzz(p){ try{ navigator.vibrate&&navigator.vibrate(p); }catch(e){} }
    Carte de progrès à partager
    ============================================================ */
 async function shareCard(){
-  const s=stats(), W=1080, H=1350, cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  /* cw/ch et non W/H : W() est la fonction des mots (cigarette ou roulée), la masquer faisait planter le partage. */
+  const s=stats(), cw=1080, ch=1350, cv=document.createElement("canvas"); cv.width=cw; cv.height=ch;
   const x=cv.getContext("2d");
   try{ await document.fonts.ready; }catch(e){}
   const c=s.before?0:clarity(s.el), v=skyVarsFixed(c);
-  const g=x.createLinearGradient(0,0,0,H); g.addColorStop(0,v.top); g.addColorStop(.6,v.mid); g.addColorStop(1,v.low);
-  x.fillStyle=g; x.fillRect(0,0,W,H);
-  const sun=x.createRadialGradient(W-140,160,10,W-140,160,420); sun.addColorStop(0,`rgba(255,244,214,${.9*v.sun})`); sun.addColorStop(1,"rgba(255,226,160,0)");
-  x.fillStyle=sun; x.fillRect(0,0,W,H);
+  const g=x.createLinearGradient(0,0,0,ch); g.addColorStop(0,v.top); g.addColorStop(.6,v.mid); g.addColorStop(1,v.low);
+  x.fillStyle=g; x.fillRect(0,0,cw,ch);
+  const sun=x.createRadialGradient(cw-140,160,10,cw-140,160,420); sun.addColorStop(0,`rgba(255,244,214,${.9*v.sun})`); sun.addColorStop(1,"rgba(255,226,160,0)");
+  x.fillStyle=sun; x.fillRect(0,0,cw,ch);
   for(let i=0;i<6;i++){ x.fillStyle=`rgba(120,126,130,${.35*v.smoke})`; x.beginPath(); x.ellipse(120+i*170,260+((i*137)%380),260,80,0,0,7); x.fill(); }
-  const F='"Bricolage Grotesque", system-ui, sans-serif';
-  x.fillStyle="#fff"; x.textBaseline="alphabetic";
+  /* Les polices et les couleurs de l'accueil : la carte doit ressembler à l'appli. */
+  const F='"Fredoka", "Nunito", system-ui, sans-serif';
+  const u=bigUnit(s.el), d=u.n;
+  x.fillStyle="#173B57"; x.textBaseline="alphabetic";
   x.font=`600 44px ${F}`; x.fillText("Souffle",80,120);
-  const d=Math.floor(s.days);
-  x.font=`760 400px ${F}`; x.fillText(String(d),64,560);
-  x.font=`600 64px ${F}`; x.fillText(d>1?"jours sans fumer":"jour sans fumer",84,660);
-  x.fillStyle="rgba(255,255,255,.94)"; roundRect(x,64,820,W-128,420,48); x.fill();
+  x.fillStyle="#1F6FB4"; x.font=`600 400px ${F}`; x.fillText(String(d),64,560);
+  x.fillStyle="#173B57"; x.font=`600 64px ${F}`; x.fillText(u.word+" sans fumer",84,660);
+  x.fillStyle="rgba(255,255,255,.94)"; roundRect(x,64,820,cw-128,420,48); x.fill();
   x.fillStyle="#16222B";
-  const col=(lbl,val,cx,cy)=>{ x.font=`500 34px system-ui, sans-serif`; x.fillStyle="#4A5864"; x.fillText(lbl,cx,cy); x.font=`700 76px ${F}`; x.fillStyle="#16222B"; x.fillText(val,cx,cy+86); };
+  const col=(lbl,val,cx,cy)=>{ x.font=`600 34px "Nunito", system-ui, sans-serif`; x.fillStyle="#4A5864"; x.fillText(lbl,cx,cy); x.font=`700 76px ${F}`; x.fillStyle="#16222B"; x.fillText(val,cx,cy+86); };
   col("Économisé",eur(s.money,true),120,920); col(W().Many+" évitées",int(s.avoided),580,920);
   col("Vie regagnée",dur(s.life),120,1110); col("Étapes du corps",reached(s.el)+" / "+MILESTONES.length,580,1110);
   const blob=await new Promise(r=>cv.toBlob(r,"image/png"));
-  const file=new File([blob],"souffle-"+d+"-jours.png",{type:"image/png"});
+  const file=new File([blob],"souffle-"+d+"-"+u.word+".png",{type:"image/png"});
   if(navigator.canShare && navigator.canShare({files:[file]})){
-    try{ await navigator.share({files:[file], title:"Souffle", text:`${d} ${d>1?"jours":"jour"} sans fumer.`}); }catch(e){}
+    try{ await navigator.share({files:[file], title:"Souffle", text:`${d} ${u.word} sans fumer.`}); }catch(e){}
   }else{
-    const u=URL.createObjectURL(blob), a=document.createElement("a"); a.href=u; a.download=file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),3000);
+    const url=URL.createObjectURL(blob), a=document.createElement("a"); a.href=url; a.download=file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),3000);
   }
 }
 function skyVarsFixed(c){ const keep=DARK; DARK=false; const v=skyVars(c); DARK=keep; return v; }
@@ -1282,7 +1483,15 @@ document.addEventListener("click",e=>{
     case "sos": openSOS(); break;
     case "sosclose": closeSOS(); break;
     case "sosok": sosResult(true); break;
-    case "sosslip": sosResult(false); break;
+    case "slip": openSlip(); break;
+    case "slwhen": SL.past=v==="1"; renderSlip(); break;
+    case "sln": SL.n=clamp(SL.n+ +b.dataset.d,1,40); renderSlip(); break;
+    case "slsave": saveSlip(); break;
+    case "slclose": closeSlip(); break;
+    case "rsclose": closeRestart(); break;
+    case "rsundo": undoSlip(); break;
+    case "rstrig": { const c=RS&&S.log.find(x=>x.id===RS.id); if(c){ c.trigger=c.trigger===v?undefined:v;
+      const e=c.link&&S.log.find(x=>x.id===c.link); if(e) e.trigger=c.trigger; save(); renderRestart(); } break; }
     case "sosmode": SOS.mode=v; renderSOS(); break;
     case "cpick": cPick(+b.dataset.i); break;
     case "sostip": SOS.tip++; renderSOS(); break;
@@ -1290,16 +1499,18 @@ document.addEventListener("click",e=>{
     case "strig": updateSOSEntry("trigger",v); break;
     case "journal": openJournal(); break;
     case "jclose": closeJournal(); break;
-    case "jtype": J.type=v; J.note=(document.getElementById("jnote")||{}).value||""; renderJournal(); break;
-    case "jint": J.intensity=+v; renderJournal(); break;
-    case "jok": J.ok=v==="1"; renderJournal(); break;
-    case "jn": J.n=clamp(J.n+ +b.dataset.d,1,40); renderJournal(); break;
-    case "jsub": J.sub=v; renderJournal(); break;
-    case "jtrig": J.note=(document.getElementById("jnote")||{}).value||""; J.trigger=J.trigger===v?null:v; renderJournal(); break;
+    case "jtype": jSync(); J.type=v; renderJournal(); break;
+    case "jint": jSync(); J.intensity=+v; renderJournal(); break;
+    case "jok": jSync(); J.ok=v==="1"; renderJournal(); break;
+    case "jn": jSync(); J.n=clamp(J.n+ +b.dataset.d,1,40); renderJournal(); break;
+    case "jsub": jSync(); J.sub=v; renderJournal(); break;
+    case "jtrig": jSync(); J.trigger=J.trigger===v?null:v; renderJournal(); break;
     case "jsave": saveJournal(); break;
-    case "delentry": { const id=b.dataset.id; if(confirm("Supprimer cette entrée du journal ?")){
-      const gone=S.log.filter(x=>x.id===id||x.link===id), undone=gone.some(undoReset);
-      S.log=S.log.filter(x=>x.id!==id && x.link!==id); save(); render(true); if(undone) toast("Remise à zéro annulée"); } break; }
+    case "delentry": { const id=b.dataset.id, gone=S.log.filter(x=>x.id===id||x.link===id), cig=gone.find(x=>x.reset);
+      const last=cig&&S.profile.quitDate===new Date(cig.at+1000).toISOString();
+      ask({title:"Supprimer cette entrée ?", text:last?"C'est la cigarette qui a remis ton compteur à zéro : en la supprimant, ton compteur d'avant revient.":"", ok:"Supprimer", danger:true}).then(yes=>{ if(!yes) return;
+        const undone=gone.map(undoReset).some(Boolean);
+        S.log=S.log.filter(x=>x.id!==id && x.link!==id); reconcile(); save(); render(true); toast(undone?"Supprimée. Ton compteur d'avant est revenu.":"Entrée supprimée"); }); break; }
     case "range": S.ui.range=v; save(); render(true); break;
     case "jall": S.ui.jall=!S.ui.jall; save(); render(true); break;
     case "prog": S.ui.prog=v; save(); render(true); break;
@@ -1313,18 +1524,19 @@ document.addEventListener("click",e=>{
     case "addreward": { const n=document.getElementById("rwname").value.trim(), p=parseNum(document.getElementById("rwprice").value);
       if(n&&p>0){ S.profile.rewards.push({id:uid(), name:n, price:p}); save(); render(true);} else toast("Indique un nom et un prix"); break; }
     case "delreward": S.profile.rewards.splice(+b.dataset.i,1); save(); render(true); break;
-    case "restart": if(confirm("Recommencer maintenant ? Ce que ton corps a réparé ne disparaît pas : on remet juste le compteur à zéro.")){ S.attempts.push({start:quitT(), end:Date.now()}); S.profile.quitDate=new Date().toISOString(); S.missions={}; S.ui.tab="today"; save(); render(); } break;
-    case "erase": if(confirm("Effacer toutes tes données Souffle ? C'est définitif.")){ const th=S.theme; S=blank(); S.theme=th; save(); OB.step=0; render(); } break;
+    case "erase": ask({title:"Tout effacer ?", text:"Ton compteur, ton journal, tes mesures et tes réglages disparaissent de ce téléphone. C'est définitif.", ok:"Tout effacer", danger:true}).then(yes=>{ if(!yes) return;
+      const th=S.theme; S=blank(); S.theme=th; save(); OB.step=0; render(); }); break;
     case "hpaste": pasteHealth(); break;
     case "hpastemanual": { const f=document.getElementById("hpastefield"); if(f&&importHealthText(f.value)){ S.ui.hmanual=false; save(); render(); } break; }
-    case "copyall": navigator.clipboard.writeText("SOUFFLE-DONNEES\n"+JSON.stringify(S)).then(()=>toast("Données copiées. Colle-les dans l'autre Souffle : Toi › Coller mes données."),()=>toast("Copie refusée par l'iPhone")); break;
+    case "copyall": navigator.clipboard.writeText("SOUFFLE-DONNEES\n"+JSON.stringify(S)).then(()=>toast("Données copiées. Dans l'autre Souffle : Toi › Coller."),()=>toast("Copie refusée par l'iPhone")); break;
     case "pasteall": navigator.clipboard.readText().then(t=>{
         if(!/^SOUFFLE-DONNEES\n/.test(t)){ toast("Rien à coller : copie d'abord tes données dans l'autre Souffle."); return; }
         let d; try{ d=JSON.parse(t.replace(/^SOUFFLE-DONNEES\n/,"")); }catch(_){ toast("Données illisibles"); return; }
         if(!d||!d.profile){ toast("Données illisibles"); return; }
-        if(S.profile && !confirm("Remplacer les données de cette Souffle par celles copiées ?")) return;
-        try{ localStorage.setItem(KEY+".prev", JSON.stringify(S)); }catch(_){}
-        localStorage.setItem(KEY, JSON.stringify(d)); location.reload();
+        const go=()=>{ try{ localStorage.setItem(KEY+".prev", JSON.stringify(S)); }catch(_){}
+          localStorage.setItem(KEY, JSON.stringify(d)); location.reload(); };
+        if(!S.profile) return go();
+        ask({title:"Remplacer tes données ?", text:"Celles de cette Souffle seront remplacées par celles que tu viens de copier.", ok:"Remplacer"}).then(yes=>{ if(yes) go(); });
       },()=>toast("Collage refusé par l'iPhone")); break;
     case "export": { const blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"}), u=URL.createObjectURL(blob), l=document.createElement("a");
       l.href=u; l.download="souffle-sauvegarde-"+dayKey()+".json"; document.body.appendChild(l); l.click(); l.remove(); setTimeout(()=>URL.revokeObjectURL(u),2000); break; }
@@ -1348,7 +1560,7 @@ document.addEventListener("input",e=>{
   if(t.dataset.f && S.profile){
     const k=t.dataset.f;
     if(k==="packPrice"||k==="pouchPrice"||k==="extrasMonth"){ const n=parseNum(t.value); if(n!=null) S.profile[k]=n; else if(k==="extrasMonth") S.profile[k]=0; }
-    else if(k==="quitDate"){ if(t.value) S.profile.quitDate=new Date(t.value).toISOString(); }
+    else if(k==="quitDate"){ if(t.value){ S.profile.quitDate=new Date(t.value).toISOString(); reconcile(); } }
     else S.profile[k]=t.value;
     save();
   }
@@ -1356,21 +1568,23 @@ document.addEventListener("input",e=>{
 document.addEventListener("change",e=>{
   if(e.target.id==="importfile" && e.target.files[0]){
     e.target.files[0].text().then(txt=>{
-      try{ const d=JSON.parse(txt); if(!d||!("profile" in d)) throw 0; S=migrate(d); save(); DARK=applyTheme(); toast("Sauvegarde restaurée"); render(); }
+      try{ const d=JSON.parse(txt); if(!d||!("profile" in d)) throw 0; S=migrate(d); reconcile(); save(); DARK=applyTheme(); toast("Sauvegarde restaurée"); render(); }
       catch(_){ toast("Ce fichier n'est pas une sauvegarde Souffle"); }
     });
   }
 });
 document.addEventListener("keydown",e=>{
   if(e.key==="Enter" && e.target.id==="newreason"){ e.preventDefault(); document.querySelector('[data-act="addreason"]').click(); }
-  if(e.key==="Escape"){ if(document.getElementById("jmodal")) closeJournal(); }
+  if(e.key==="Escape"){ if(document.getElementById("slipmodal")) closeSlip(); else if(document.getElementById("jmodal")) closeJournal(); }
 });
-document.addEventListener("pointerdown",e=>{ if(e.target.classList&&e.target.classList.contains("modal")) closeJournal(); });
+document.addEventListener("pointerdown",e=>{ if(e.target.id==="jmodal") closeJournal(); else if(e.target.id==="slipmodal") closeSlip(); });
+document.addEventListener("input",e=>{ if(e.target.id==="jat") jSync(); });
 window.addEventListener("hashchange",()=>{ if(importFromHash() && S.profile) render(true); });
 document.addEventListener("visibilitychange",()=>{ if(!document.hidden && S.profile && S.ui.tab==="today") tick(); });
 try{ navigator.storage&&navigator.storage.persist&&navigator.storage.persist(); }catch(e){}
 
 importFromHash();
+reconcile(); save();
 render();
 
 /* Mise à jour automatique : l'iPhone garde la page en cache. À l'ouverture et au retour

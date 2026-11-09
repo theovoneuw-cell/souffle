@@ -113,14 +113,23 @@ a{color:inherit;text-decoration:none}
 /* SOS flottant */
 .dock{position:fixed;left:0;right:0;bottom:calc(var(--tabh) + var(--sb) + 20px);z-index:20;pointer-events:none}
 .dock .in{max-width:440px;margin:0 auto;width:calc(100% - 28px);display:flex;gap:10px;pointer-events:auto}
-.dock .btn{border-radius:18px;min-height:56px;font-size:18px}
-.dock .note{width:52px;flex:none;padding:0;background:var(--paper);color:var(--ink);box-shadow:0 1px 2px rgba(28,37,45,.06),0 6px 18px rgba(63,111,158,.12)}
+.dock .btn{border-radius:18px;min-height:56px;font-size:18px;white-space:nowrap;min-width:0;padding-inline:12px}
+.dock .slip{width:auto;flex:none;padding-inline:16px;font-size:16px;background:var(--paper);color:var(--ink);box-shadow:0 1px 2px rgba(28,37,45,.06),0 6px 18px rgba(63,111,158,.12)}
+:root[data-theme="dark"] .dock .slip{box-shadow:0 0 0 1px var(--hair),0 6px 18px rgba(0,0,0,.35)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .dock .slip{box-shadow:0 0 0 1px var(--hair),0 6px 18px rgba(0,0,0,.35)}}
+@media (max-width:359px){.dock .btn{font-size:16px} .dock .ember .ico{display:none} .dock .slip{font-size:15px;padding-inline:12px}}
+/* Ce qui défile sous les boutons flottants s'efface dans le fond au lieu d'être coupé net. */
+.dock::before{content:"";position:fixed;left:0;right:0;bottom:0;height:calc(var(--tabh) + var(--sb) + 124px);background:linear-gradient(180deg,transparent 0,var(--bg) 40%);pointer-events:none;z-index:-1}
+.tabs.solo::before{content:"";position:fixed;left:0;right:0;bottom:0;height:calc(var(--tabh) + var(--sb) + 40px);background:linear-gradient(180deg,transparent 0,var(--bg) 55%);pointer-events:none;z-index:-1}
 
 /* Segment iOS */
 .seg{display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;background:none;border-radius:0;padding:0;gap:0;box-shadow:inset 0 -1px 0 var(--hair)}
 .seg button{padding:10px 12px;border-radius:0;font-weight:500;font-size:14px;color:var(--ash);white-space:nowrap;letter-spacing:0;transition:color .3s var(--ease),box-shadow .3s var(--ease)}
 .seg button.on{color:var(--ink);box-shadow:inset 0 -2px 0 var(--air)}
 .seg.full{display:grid;width:100%}
+.seg.tight button{padding:10px 4px;font-size:13.5px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pair .btn{padding-inline:10px}
 
 /* Puces */
 .chips{display:flex;flex-wrap:wrap;gap:8px}
@@ -148,7 +157,7 @@ textarea.inp{resize:none;min-height:50px;line-height:1.35}
    Ciel aux couleurs du logo, fumée qui se change en nuages, soleil, collines
    vert sauge. Un arbre pousse à chaque étape du corps franchie. */
 .skybg{position:fixed;inset:0;z-index:0;overflow:hidden;background:linear-gradient(180deg,var(--sky-top,#707E86) 0%,var(--sky-mid,#8A9196) 55%,var(--sky-low,#B0B5B8) 100%)}
-.scene{--hills-h:max(178px,calc(min(100vw,632px)*.375));position:relative;overflow:hidden;margin:0 -16px 18px;min-height:calc(var(--st) + 460px);display:flex;flex-direction:column;
+.scene{--hills-h:max(178px,calc(min(100vw,632px)*.375));position:relative;overflow:hidden;margin:0 -16px 18px;min-height:var(--scene-h,calc(var(--st) + 460px));display:flex;flex-direction:column;
   background:linear-gradient(180deg,var(--sky-top,#707E86) 0%,var(--sky-mid,#8A9196) 52%,var(--sky-low,#B0B5B8) 100%);
   --cloud:#FFFFFF;--cloud-shade:#DCEBF7;--cloud-hi:rgba(255,255,255,0);--trunk:#8C6A4F;--leaf-hi:rgba(255,255,255,.28);
   --hill0:#CDE6D2;--hill1:#B0E09C;--hill2:#80CB74;--hill3:#5CB45E;--leaf:#40A04A;--leaf-dark:color-mix(in srgb,var(--leaf) 70%,#0E2A14);--path:#F3E7C9;--mill:#FFFFFF;--mill-hub:#D7E3EC}
@@ -189,7 +198,12 @@ textarea.inp{resize:none;min-height:50px;line-height:1.35}
 @media (prefers-reduced-motion:reduce){.smoke,.cloud,.tree,.birds,.stars circle{animation:none}}
 
 .today{position:relative;z-index:1;color:var(--ink);max-width:600px;margin:0 auto;padding:0 16px calc(var(--tabh) + var(--sb) + 104px)}
-.hero{position:relative;z-index:2;text-align:center;color:#173B57;padding:calc(var(--st) + 30px) 16px calc(var(--hills-h) + 14px);--num:#1F6FB4;--green:#2F8F3E}
+.hero{position:relative;z-index:2;text-align:center;color:#173B57;margin-block:auto;padding:calc(var(--st) + 30px) 16px calc(var(--hills-h) + 14px);--num:#1F6FB4;--green:#2F8F3E}
+.scene-add{position:absolute;z-index:3;top:calc(var(--st) + 12px);right:14px;display:flex;align-items:center;gap:4px;padding:7px 13px 7px 9px;border-radius:99px;
+  font-family:var(--display);font-weight:500;font-size:15px;color:#173B57;background:rgba(255,255,255,.74);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);transition:transform .3s var(--ease)}
+.scene-add:active{transform:scale(.96)}
+:root[data-theme="dark"] .scene-add{color:#EAF3FA;background:rgba(18,28,38,.6)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .scene-add{color:#EAF3FA;background:rgba(18,28,38,.6)}}
 :root[data-theme="dark"] .hero{color:#EAF3FA;--num:#9CCBF2;--green:#8FD48C}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .hero{color:#EAF3FA;--num:#9CCBF2;--green:#8FD48C}}
 .hero .who{font-family:var(--display);font-size:20px;font-weight:500;letter-spacing:0}
@@ -295,6 +309,12 @@ details.tbl td:last-child,details.tbl th:last-child{text-align:right}
 /* ---------- Feuille modale iOS ---------- */
 .modal{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;justify-content:flex-end;background:rgba(0,0,0,.36);animation:fade .2s ease}
 .modal .panel{background:var(--bg);border-radius:16px 16px 0 0;max-height:94dvh;overflow:auto;padding:8px 16px calc(var(--sb) + 18px);animation:up .4s cubic-bezier(.2,.9,.25,1);max-width:600px;width:100%;margin:0 auto}
+.modal.top{z-index:80}
+.consq{margin-top:18px;border-radius:14px;background:var(--paper);padding:2px 14px;box-shadow:0 0 0 1px var(--hair)}
+.consq>div{padding:11px 0;font-size:14px;line-height:1.4;color:var(--ink2)}
+.consq>div+div{border-top:.5px solid var(--hair)}
+.consq b{display:block;font-family:var(--display);font-weight:500;font-size:15px;color:var(--ink);margin-bottom:1px}
+.consq>div:first-child b{color:var(--ember)}
 .modal .grab{width:36px;height:5px;border-radius:9px;background:var(--hair);margin:0 auto 12px}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 @keyframes up{from{transform:translateY(100%)}to{transform:none}}
@@ -318,6 +338,17 @@ details.tbl td:last-child,details.tbl th:last-child{text-align:right}
 .enc{font-size:20px;font-weight:500;line-height:1.3;min-height:84px;display:grid;place-items:center;padding:0 8px;transition:opacity .35s;text-wrap:balance}
 .sos .btn.white{background:#fff;color:#000}
 .sos .ghost{display:block;margin:10px auto 0;color:rgba(255,255,255,.88);font-size:16px;padding:6px 12px}
+.sos-exit{display:flex;gap:10px;margin-top:10px}
+.sos-exit .btn{padding-inline:10px}
+.sos-exit .white{flex:1.5} .sos-exit .outline{flex:1}
+.sos .btn.outline{background:rgba(18,42,64,.38);color:#fff;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.55)}
+.sos .btn.glassy{background:rgba(255,255,255,.2);color:#fff;box-shadow:none}
+/* Le ciel s'est recouvert, mais le jour revient déjà par le bas. */
+.sos.restart{z-index:85;background:radial-gradient(130% 55% at 50% 118%,rgba(255,198,128,.62),rgba(255,198,128,0) 64%),linear-gradient(180deg,#3D4953 0%,#59666F 55%,#77838B 100%)}
+:root[data-theme="dark"] .sos.restart{background:radial-gradient(130% 55% at 50% 118%,rgba(214,150,90,.3),rgba(214,150,90,0) 62%),linear-gradient(180deg,#10151A 0%,#1F272E 60%,#313B43 100%)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .sos.restart{background:radial-gradient(130% 55% at 50% 118%,rgba(214,150,90,.3),rgba(214,150,90,0) 62%),linear-gradient(180deg,#10151A 0%,#1F272E 60%,#313B43 100%)}}
+.rs-ic{width:84px;height:84px;border-radius:50%;background:rgba(255,255,255,.2);display:grid;place-items:center;margin-bottom:16px;flex:none}
+.rs-p{margin:10px 0 0;font-size:17px;line-height:1.45;max-width:380px}
 .surf{max-width:420px;font-size:24px;line-height:1.3;font-weight:600;text-wrap:balance;transition:opacity .5s}
 .wave{width:100%;max-width:420px;height:90px;margin-bottom:24px}
 .game{position:relative;width:100%;flex:1;border-radius:20px;background:rgba(255,255,255,.12);overflow:hidden;touch-action:none}
@@ -363,7 +394,7 @@ details.tbl td:last-child,details.tbl th:last-child{text-align:right}
 .prog i.on{background:var(--air)}
 
 /* ---------- Toast et trophée débloqué ---------- */
-.toast{position:fixed;left:50%;top:calc(var(--st) + 10px);transform:translateX(-50%);z-index:90;background:var(--bar-bg);color:var(--ink);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);padding:11px 16px;border-radius:var(--r);font-weight:500;font-size:14px;animation:toastIn .6s var(--ease);white-space:nowrap;box-shadow:0 0 0 .5px var(--hair),0 8px 30px rgba(0,0,0,.16)}
+.toast{position:fixed;left:50%;top:calc(var(--st) + 10px);transform:translateX(-50%);z-index:90;background:var(--bar-bg);color:var(--ink);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);padding:11px 16px;border-radius:var(--r);font-weight:600;font-size:14px;line-height:1.35;text-align:center;animation:toastIn .6s var(--ease);width:max-content;max-width:calc(100vw - 32px);box-shadow:0 0 0 .5px var(--hair),0 8px 30px rgba(0,0,0,.16)}
 @keyframes toastIn{from{opacity:0;transform:translate(-50%,-8px)}to{opacity:1;transform:translateX(-50%)}}
 .unlock{position:fixed;inset:0;z-index:95;display:grid;place-items:center;background:rgba(0,0,0,.4);animation:fade .25s ease;padding:24px}
 .unlock .card{background:var(--paper);border-radius:22px;padding:30px 22px 18px;text-align:center;max-width:320px;width:100%;animation:pop .6s var(--ease)}

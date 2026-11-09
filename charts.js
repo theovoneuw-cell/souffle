@@ -108,7 +108,7 @@ function line({points, height=160, color="var(--air)", ref=null, refLabel="", pr
   const P=points.map(p=>[x(p.t),y(p.v)]);
   if(P.length>1){
     const d=P.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+","+p[1].toFixed(1)).join("");
-    g+=`<path class="area" d="${d}L${P[P.length-1][0]},${y(zero?0:mn)}L${P[0][0]},${y(zero?0:mn)}Z" fill="${color}" opacity=".12"/>`;
+    g+=`<path class="area" d="${d}L${P[P.length-1][0]},${y(zero?0:mn)}L${P[0][0]},${y(zero?0:mn)}Z" fill="${color}" fill-opacity=".14"/>`;
     g+=`<path class="ln" pathLength="1" d="${d}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
   }
   if(proj && proj.length){
